@@ -236,10 +236,36 @@ async function testE2E(){
     eq((await post("/api/logout",{}, users[6].token)).status, 200, "خروج موفق است");
     eq((await post("/api/prediction",{matchId:om,h:1,a:1,s:[]}, users[6].token)).status, 401, "توکن بعد از خروج باطل است");
 
+    // --- بازیابی رمز با «کد بازیابی» ---
+    ok(users[10].recoveryCode && /^[A-F0-9]{4}(-[A-F0-9]{4}){3}$/.test(users[10].recoveryCode), "ثبت‌نام «کد بازیابی» می‌دهد");
+    eq((await post("/api/recover",{username:"player10", recoveryCode:"WRONG-0000-0000-0000", newPassword:"newpass1"})).status, 401, "بازیابی با کد اشتباه رد می‌شود");
+    eq((await post("/api/recover",{username:"player10", recoveryCode:users[10].recoveryCode, newPassword:"newpass1"})).status, 200, "بازیابی با کد درست موفق است");
+    eq((await post("/api/login",{username:"player10", password:"newpass1"})).status, 200, "ورود با رمز جدیدِ بازیابی‌شده");
+    eq((await post("/api/login",{username:"player10", password:"pw10secret"})).status, 401, "رمز قدیمی بعد از بازیابی کار نمی‌کند");
+
+    // --- تغییر رمز توسط خود کاربر ---
+    eq((await post("/api/change-password",{oldPassword:"WRONG", newPassword:"x123"}, users[11].token)).status, 401, "تغییر رمز با رمز فعلیِ اشتباه رد می‌شود");
+    eq((await post("/api/change-password",{oldPassword:"pw11secret", newPassword:"changed11"}, users[11].token)).status, 200, "تغییر رمز با رمز فعلیِ درست موفق است");
+    eq((await post("/api/login",{username:"player11", password:"changed11"})).status, 200, "ورود با رمز تغییریافته");
+
+    // --- ریست رمز توسط مدیر (مدیر فعلی users[2]) ---
+    const adminTok2 = users[2].token;
+    eq((await post("/api/admin/reset-password",{target:users[12].id}, users[5].token)).status, 403, "کاربر عادی نمی‌تواند رمز کسی را ریست کند");
+    const rst = await post("/api/admin/reset-password",{target:users[12].id}, adminTok2);
+    eq(rst.status, 200, "مدیر رمز کاربر را ریست کرد");
+    ok(rst.body.tempPassword && rst.body.tempPassword.length>=6, "رمز موقت برگردانده شد");
+    eq((await post("/api/login",{username:"player12", password:rst.body.tempPassword})).status, 200, "ورود با رمز موقت کار می‌کند");
+    eq((await post("/api/login",{username:"player12", password:"pw12secret"})).status, 401, "رمز قدیمیِ کاربرِ ریست‌شده کار نمی‌کند");
+    eq((await post("/api/prediction",{matchId:om,h:1,a:1,s:[]}, users[12].token)).status, 401, "توکن کاربر بعد از ریستِ مدیر باطل است");
+
+    // --- نشتی نکردن کد بازیابی ---
+    ok(!(await getState()).users.some(u=>("recHash" in u)||("recoveryCode" in u)), "کد بازیابی در state عمومی لو نمی‌رود");
+
     // --- پایداری روی دیسک ---
     const onDisk = JSON.parse(fs.readFileSync(DATA,"utf8"));
     eq(onDisk.users.length, N, "داده‌ها روی دیسک ذخیره شده‌اند");
     ok(onDisk.users.every(u=>u.hash && u.salt && !( "password" in u )), "رمزها فقط به‌صورت هش ذخیره شده‌اند (نه متن خام)");
+    ok(onDisk.users.every(u=>u.recHash && !( "recoveryCode" in u )), "کد بازیابی فقط به‌صورت هش ذخیره شده (نه متن خام)");
 
   } finally {
     srv.kill();

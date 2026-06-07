@@ -41,16 +41,76 @@
     const d = await post("/api/register", { username, email, password });
     TOKEN = d.token; localStorage.setItem("wc26_token", TOKEN);
     await getState(); render();
+    if(d.recoveryCode) showRecoveryModal(d.recoveryCode);
   }
   async function doLogin(username, password){
     const d = await post("/api/login", { username, password });
     TOKEN = d.token; localStorage.setItem("wc26_token", TOKEN);
     await getState(); render();
   }
+  async function doRecover(username, recoveryCode, newPassword){
+    const d = await post("/api/recover", { username, recoveryCode, newPassword });
+    TOKEN = d.token; localStorage.setItem("wc26_token", TOKEN);
+    await getState(); render();
+    toast("رمز جدید ثبت شد و وارد شدی");
+  }
   function logout(){
     post("/api/logout", {}).catch(()=>{});
     TOKEN = null; localStorage.removeItem("wc26_token");
     S.me = null; ME = null; GATE_MODE = "login"; render();
+  }
+
+  // ---------- modal ----------
+  function showModal(inner, onMount){
+    const ov = document.createElement("div"); ov.className = "modal-ov";
+    ov.innerHTML = `<div class="modal">${inner}</div>`;
+    ov.addEventListener("click", e => { if(e.target === ov) ov.remove(); });
+    document.body.appendChild(ov);
+    if(onMount) onMount(ov);
+    return ov;
+  }
+  function showRecoveryModal(code){
+    showModal(`
+      <div class="big" style="margin:0 auto 12px">🔑</div>
+      <h3>کد بازیابی تو</h3>
+      <p class="sub">اگر رمزت را فراموش کردی، با این کد می‌توانی رمز جدید بسازی. <b>همین حالا ذخیره‌اش کن</b> — این کد فقط همین یک‌بار نشان داده می‌شود.</p>
+      <div class="reccode">${esc(code)}</div>
+      <div class="cardfoot">
+        <button class="btn ghost" data-act="copy">📋 کپی</button>
+        <button class="btn primary" data-act="ok">ذخیره کردم، ادامه</button>
+      </div>`, ov => {
+        ov.querySelector('[data-act="copy"]').onclick = () => {
+          (navigator.clipboard ? navigator.clipboard.writeText(code) : Promise.reject()).then(()=>toast("کپی شد")).catch(()=>toast("دستی کپی کن",true));
+        };
+        ov.querySelector('[data-act="ok"]').onclick = () => ov.remove();
+      });
+  }
+  function showTempPwModal(name, temp){
+    showModal(`
+      <h3>رمز موقت برای «${esc(name)}»</h3>
+      <p class="sub">این رمز موقت را به این کاربر بده. او با آن وارد می‌شود و بعد می‌تواند از «تغییر رمز» رمز دلخواهش را بگذارد.</p>
+      <div class="reccode">${esc(temp)}</div>
+      <div class="cardfoot" style="justify-content:center"><button class="btn primary" data-act="ok">باشه</button></div>`,
+      ov => { ov.querySelector('[data-act="ok"]').onclick = () => ov.remove(); });
+  }
+  function showChangePwModal(){
+    showModal(`
+      <h3>تغییر رمز</h3>
+      <input id="cp-old" type="password" placeholder="رمز فعلی" autocomplete="current-password"/>
+      <input id="cp-new" type="password" placeholder="رمز جدید" autocomplete="new-password"/>
+      <div class="cardfoot" style="justify-content:center">
+        <button class="btn ghost" data-act="cancel">انصراف</button>
+        <button class="btn primary" data-act="save">ذخیره</button>
+      </div>`, ov => {
+        ov.querySelector('[data-act="cancel"]').onclick = () => ov.remove();
+        ov.querySelector('[data-act="save"]').onclick = async () => {
+          const oldPassword = ov.querySelector("#cp-old").value;
+          const newPassword = ov.querySelector("#cp-new").value;
+          if(newPassword.length < 4){ toast("رمز جدید حداقل ۴ کاراکتر",true); return; }
+          try{ await post("/api/change-password",{ oldPassword, newPassword }); ov.remove(); toast("رمز تغییر کرد"); }
+          catch(e){ toast(e.message,true); }
+        };
+      });
   }
 
   // ---------- helpers ----------
@@ -76,6 +136,7 @@
           </div>
           <div class="who">
             <span class="chip-user">${isAdmin()?"🛡️ ":""}${esc(u.name)}</span>
+            <button class="iconbtn" data-act="chpw" title="تغییر رمز">🔑</button>
             <button class="iconbtn" data-act="refresh" title="به‌روزرسانی">↻</button>
             <button class="iconbtn" data-act="logout">خروج</button>
           </div>
@@ -104,36 +165,56 @@
     bindView();
   }
 
-  // ---------- gate (login / register) ----------
+  // ---------- gate (login / register / recover) ----------
   function renderGate(){
     const m = GATE_MODE;
+    const desc = m==="login" ? "برای ادامه وارد حسابت شو."
+      : m==="register" ? "یک حساب بساز تا فقط خودت بتوانی پیش‌بینی‌هایت را ثبت و ویرایش کنی."
+      : "نام‌کاربری و کد بازیابی‌ات را وارد کن تا رمز جدید بسازی.";
+    let fields;
+    if(m==="recover"){
+      fields = `<input id="g-user" placeholder="نام‌کاربری" maxlength="30" autocomplete="username"/>
+        <input id="g-code" placeholder="کد بازیابی (XXXX-XXXX-XXXX-XXXX)" autocomplete="off" style="direction:ltr;text-align:center"/>
+        <input id="g-pass" type="password" placeholder="رمز جدید" autocomplete="new-password"/>`;
+    } else {
+      fields = `<input id="g-user" placeholder="نام‌کاربری" maxlength="30" autocomplete="username"/>
+        ${m==="register" ? `<input id="g-email" type="email" placeholder="ایمیل" maxlength="120" autocomplete="email"/>` : ""}
+        <input id="g-pass" type="password" placeholder="رمز عبور" autocomplete="${m==="login"?"current-password":"new-password"}"/>`;
+    }
+    const btnLabel = m==="login" ? "✓ ورود" : m==="register" ? "✓ ساخت حساب" : "✓ ثبت رمز جدید";
     $app.innerHTML = `<div class="gate"><div class="box">
       <div class="big">🏆</div>
       <h2>جام پیش‌بینی ۲۰۲۶</h2>
-      <p>${m==="login" ? "برای ادامه وارد حسابت شو." : "یک حساب بساز تا فقط خودت بتوانی پیش‌بینی‌هایت را ثبت و ویرایش کنی."}</p>
-      <div class="authtabs">
+      <p>${desc}</p>
+      ${m!=="recover" ? `<div class="authtabs">
         <button class="${m==="login"?"on":""}" data-mode="login">ورود</button>
         <button class="${m==="register"?"on":""}" data-mode="register">ثبت‌نام</button>
-      </div>
-      <input id="g-user" placeholder="نام‌کاربری" maxlength="30" autocomplete="username"/>
-      ${m==="register" ? `<input id="g-email" type="email" placeholder="ایمیل" maxlength="120" autocomplete="email"/>` : ""}
-      <input id="g-pass" type="password" placeholder="رمز عبور" autocomplete="${m==="login"?"current-password":"new-password"}"/>
-      <button class="btn primary" style="width:100%;justify-content:center" data-act="submit">${m==="login"?"✓ ورود":"✓ ساخت حساب"}</button>
+      </div>` : ""}
+      ${fields}
+      <button class="btn primary" style="width:100%;justify-content:center" data-act="submit">${btnLabel}</button>
+      ${m==="login" ? `<button class="linkbtn" data-mode="recover">رمزت را فراموش کردی؟</button>` : ""}
+      ${m==="recover" ? `<button class="linkbtn" data-mode="login">‹ بازگشت به ورود</button>` : ""}
       <div class="note">${m==="register"
-        ? "اولین کسی که ثبت‌نام کند «مدیر» بازی می‌شود (ثبت نتایج واقعی). ایمیل فقط برای شناساییِ حساب است و در سایت به کسی نشان داده نمی‌شود."
+        ? "اولین کسی که ثبت‌نام کند «مدیر» بازی می‌شود (ثبت نتایج واقعی). بعد از ثبت‌نام یک «کد بازیابی» می‌گیری که باید ذخیره‌اش کنی. ایمیل فقط برای شناساییِ حساب است و به کسی نشان داده نمی‌شود."
+        : m==="recover" ? "کد بازیابی همان است که موقع ثبت‌نام گرفتی. اگر آن را نداری، از مدیر بخواه رمزت را ریست کند."
         : "حساب نداری؟ از بالا «ثبت‌نام» را بزن."}</div>
     </div></div>`;
     $app.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{ GATE_MODE=b.dataset.mode; renderGate(); });
     const submit=async()=>{
       const user=document.getElementById("g-user").value.trim();
       const pass=document.getElementById("g-pass").value;
-      if(!user||!pass){ toast("نام‌کاربری و رمز را وارد کن",true); return; }
+      if(!user||!pass){ toast("همهٔ کادرها را پر کن",true); return; }
       try{
         if(m==="register"){
           const email=(document.getElementById("g-email")||{value:""}).value.trim();
           if(!/^\S+@\S+\.\S+$/.test(email)){ toast("ایمیل معتبر وارد کن",true); return; }
           if(pass.length<4){ toast("رمز عبور حداقل ۴ کاراکتر",true); return; }
           await doRegister(user,email,pass);
+        } else if(m==="recover"){
+          const code=document.getElementById("g-code").value.trim();
+          if(!code){ toast("کد بازیابی را وارد کن",true); return; }
+          if(pass.length<4){ toast("رمز جدید حداقل ۴ کاراکتر",true); return; }
+          await doRecover(user,code,pass);
         } else await doLogin(user,pass);
       }catch(e){ toast(e.message,true); }
     };
@@ -325,11 +406,14 @@
         </div>
         <div class="cardfoot"><button class="btn primary" data-act="save-cfg">💾 ذخیرهٔ تنظیمات</button></div></div>`;
     } else {
-      html+=`<div class="panel"><h3>کاربران بازی</h3><p class="sub">می‌توانی نقش مدیر را به دیگری بدهی.</p>`;
+      html+=`<div class="panel"><h3>کاربران بازی</h3><p class="sub">می‌توانی نقش مدیر را به دیگری بدهی، یا رمز کسی را که گیر کرده ریست کنی.</p>`;
       S.users.forEach(u=>{
         html+=`<div class="rule"><div class="ic">👤</div>
           <div><b>${esc(u.name)}</b><p>${u.id===S.admin?"مدیر فعلی":"کاربر"}</p></div>
-          ${u.id!==S.admin?`<button class="btn ghost" style="margin-inline-start:auto" data-act="make-admin" data-uid="${u.id}">🛡️ مدیر کن</button>`:""}</div>`;
+          <div style="margin-inline-start:auto;display:flex;gap:8px;flex-wrap:wrap">
+            ${u.id!==ME?`<button class="btn ghost" data-act="reset-pw" data-uid="${u.id}">🔁 ریست رمز</button>`:""}
+            ${u.id!==S.admin?`<button class="btn ghost" data-act="make-admin" data-uid="${u.id}">🛡️ مدیر کن</button>`:""}
+          </div></div>`;
       });
       html+=`</div>`;
     }
@@ -362,6 +446,7 @@
   function bindGlobal(){
     $app.querySelectorAll("[data-tab]").forEach(b=>b.onclick=async()=>{ TAB=b.dataset.tab; try{await getState();}catch{} renderView(); updateTabs(); });
     const rf=$app.querySelector('[data-act="refresh"]'); if(rf) rf.onclick=async()=>{ try{await getState(); renderView(); toast("به‌روزرسانی شد");}catch(e){toast(e.message,true);} };
+    const cp=$app.querySelector('[data-act="chpw"]'); if(cp) cp.onclick=()=>{ showChangePwModal(); };
     const lo=$app.querySelector('[data-act="logout"]'); if(lo) lo.onclick=()=>{ logout(); };
   }
   function updateTabs(){ $app.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("active", b.dataset.tab===TAB)); }
@@ -401,7 +486,12 @@
     };
 
     v.querySelectorAll('[data-act="make-admin"]').forEach(b=>b.onclick=async()=>{
-      try{ await post("/api/admin/transfer",{ userId:ME, target:b.dataset.uid }); await getState(); toast("مدیر تغییر کرد"); render(); }catch(e){ toast(e.message,true); }
+      try{ await post("/api/admin/transfer",{ target:b.dataset.uid }); await getState(); toast("مدیر تغییر کرد"); render(); }catch(e){ toast(e.message,true); }
+    });
+
+    v.querySelectorAll('[data-act="reset-pw"]').forEach(b=>b.onclick=async()=>{
+      try{ const d=await post("/api/admin/reset-password",{ target:b.dataset.uid }); showTempPwModal(d.name, d.tempPassword); }
+      catch(e){ toast(e.message,true); }
     });
   }
 

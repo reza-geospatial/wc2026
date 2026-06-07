@@ -88,7 +88,27 @@ function verifyPw(password, salt, hash){
     return h.length === k.length && crypto.timingSafeEqual(h, k);
   }catch{ return false; }
 }
+// کد بازیابی: ۱۶ کاراکتر، نمایش به‌صورت XXXX-XXXX-XXXX-XXXX، ذخیره فقط به‌صورت هش
+const normalizeCode = s => String(s||"").replace(/[^a-z0-9]/gi, "").toLowerCase();
+function makeRecovery(){
+  const raw = crypto.randomBytes(8).toString("hex");      // ۱۶ کاراکتر hex
+  const pretty = raw.toUpperCase().match(/.{1,4}/g).join("-");
+  return { pretty, normalized: raw.toLowerCase() };
+}
+function setRecovery(u){
+  const r = makeRecovery();
+  u.recSalt = crypto.randomBytes(16).toString("hex");
+  u.recHash = hashPw(r.normalized, u.recSalt);
+  return r.pretty;
+}
+function verifyRecovery(u, code){
+  if(!u || !u.recHash || !u.recSalt) return false;
+  return verifyPw(normalizeCode(code), u.recSalt, u.recHash);
+}
+function setPassword(u, pw){ u.salt = crypto.randomBytes(16).toString("hex"); u.hash = hashPw(pw, u.salt); }
+const genTempPw = () => crypto.randomBytes(4).toString("hex");   // ۸ کاراکتر
 function isUser(id){ return DB.users.some(u => u.id === id); }
+function userById(id){ return DB.users.find(u => u.id === id); }
 function userByName(name){ return DB.users.find(u => WC.norm(u.name) === WC.norm(name)); }
 function tokenFrom(req, body){
   const h = req.headers["authorization"] || "";
@@ -103,6 +123,7 @@ function authUid(req, body){
   return (id && isUser(id)) ? id : null;
 }
 const pubUser = u => ({ id: u.id, name: u.name });
+
 
 /* ---------- http helpers ---------- */
 function send(res, code, obj){
@@ -165,14 +186,15 @@ async function api(req, res, url){
     if(name.length < 2) return send(res, 400, { error: "نام‌کاربری حداقل ۲ حرف" });
     if(pw.length < 4)   return send(res, 400, { error: "رمز عبور حداقل ۴ کاراکتر" });
     if(userByName(name)) return send(res, 409, { error: "این نام‌کاربری قبلاً گرفته شده" });
-    const salt = crypto.randomBytes(16).toString("hex");
-    const u = { id: uid(), name, salt, hash: hashPw(pw, salt), email: String(email||"").trim().slice(0,120) };
+    const u = { id: uid(), name, email: String(email||"").trim().slice(0,120) };
+    setPassword(u, pw);
+    const recoveryCode = setRecovery(u);
     DB.users.push(u);
     DB.preds[u.id] = {};
     if(!DB.admin) DB.admin = u.id;
     const token = makeToken(); DB.sessions[token] = u.id;
     save();
-    return send(res, 200, { token, id: u.id, name: u.name, admin: DB.admin });
+    return send(res, 200, { token, id: u.id, name: u.name, admin: DB.admin, recoveryCode });
   }
 
   if(url === "/api/login" && method === "POST"){
@@ -189,6 +211,50 @@ async function api(req, res, url){
     const t = tokenFrom(req, await readBody(req));
     if(t && DB.sessions[t]){ delete DB.sessions[t]; save(); }
     return send(res, 200, { ok: true });
+  }
+
+  // بازیابی رمز با «کد بازیابی» (بدون نیاز به ایمیل)
+  if(url === "/api/recover" && method === "POST"){
+    const { username, recoveryCode, newPassword } = await readBody(req);
+    const u = userByName(String(username||"").trim());
+    const pw = String(newPassword||"");
+    if(!u) return send(res, 401, { error: "نام‌کاربری یا کد بازیابی اشتباه است" });
+    if(!u.recHash) return send(res, 400, { error: "این حساب کد بازیابی ندارد؛ از مدیر بخواه رمزت را ریست کند" });
+    if(!verifyRecovery(u, recoveryCode)) return send(res, 401, { error: "نام‌کاربری یا کد بازیابی اشتباه است" });
+    if(pw.length < 4) return send(res, 400, { error: "رمز جدید حداقل ۴ کاراکتر" });
+    setPassword(u, pw);
+    const token = makeToken(); DB.sessions[token] = u.id;
+    save();
+    return send(res, 200, { token, id: u.id, name: u.name, admin: DB.admin });
+  }
+
+  // تغییر رمز توسط کاربرِ واردشده (با رمز فعلی)
+  if(url === "/api/change-password" && method === "POST"){
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(!meId) return send(res, 401, { error: "لطفاً وارد شوید" });
+    const u = userById(meId);
+    if(!verifyPw(String(body.oldPassword||""), u.salt, u.hash)) return send(res, 401, { error: "رمز فعلی اشتباه است" });
+    const np = String(body.newPassword||"");
+    if(np.length < 4) return send(res, 400, { error: "رمز جدید حداقل ۴ کاراکتر" });
+    setPassword(u, np);
+    save();
+    return send(res, 200, { ok: true });
+  }
+
+  // ریست رمز توسط مدیر → یک رمز موقت تولید و برمی‌گرداند تا مدیر به کاربر بدهد
+  if(url === "/api/admin/reset-password" && method === "POST"){
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(meId !== DB.admin) return send(res, 403, { error: "فقط مدیر" });
+    const u = userById(body.target);
+    if(!u) return send(res, 404, { error: "کاربر هدف نامعتبر" });
+    const temp = genTempPw();
+    setPassword(u, temp);
+    // نشست‌های فعلیِ آن کاربر باطل می‌شوند تا با رمز موقت دوباره وارد شود
+    for(const t in DB.sessions){ if(DB.sessions[t] === u.id) delete DB.sessions[t]; }
+    save();
+    return send(res, 200, { ok: true, tempPassword: temp, name: u.name });
   }
 
   if(url === "/api/prediction" && method === "POST"){

@@ -105,12 +105,11 @@ async function waitServer(base, ms=5000){
 }
 
 async function testE2E(){
-  section("۵) شبیه‌سازی end-to-end با ۳۰ کاربر روی سرور واقعی");
+  section("۵) شبیه‌سازی end-to-end با ۳۰ کاربر + احراز هویت روی سرور واقعی");
   const PORT = 4399;
   const base = "http://localhost:"+PORT;
   const DATA = path.join(__dirname, "data.test.json");
   try{ fs.unlinkSync(DATA); }catch{}
-  // ساعت آزمایشی: میانهٔ تورنمنت تا هم بازیِ قفل داشته باشیم هم باز
   const TEST_NOW = String(Date.parse("2026-06-20T12:00:00Z"));
 
   const srv = spawn("node", ["server.js"], {
@@ -124,36 +123,69 @@ async function testE2E(){
     ok(up, "سرور بالا آمد");
     if(!up) return;
 
-    const post=async(p,b)=>{ const r=await fetch(base+p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}); return { status:r.status, body:await r.json().catch(()=>({})) }; };
-    const getState=async()=>{ const r=await fetch(base+"/api/state"); return r.json(); };
+    const post=async(p,b,token)=>{
+      const headers={"Content-Type":"application/json"}; if(token) headers["Authorization"]="Bearer "+token;
+      const r=await fetch(base+p,{method:"POST",headers,body:JSON.stringify(b||{})});
+      return { status:r.status, body:await r.json().catch(()=>({})) };
+    };
+    const getState=async(token)=>{ const r=await fetch(base+"/api/state",{headers:token?{Authorization:"Bearer "+token}:{}}); return r.json(); };
 
     const nowN = Number(TEST_NOW);
     const lockedMatches = WC.MATCHES.filter(m=>WC.isLocked(m,nowN));
     const openMatches   = WC.MATCHES.filter(m=>!WC.isLocked(m,nowN));
     ok(openMatches.length>0 && lockedMatches.length>0, `داریم ${openMatches.length} بازی باز و ${lockedMatches.length} بازی قفل`);
 
-    // --- ثبت‌نام ۳۰ کاربر ---
+    // --- ثبت‌نام ۳۰ کاربر با نام‌کاربری/ایمیل/رمز ---
     const N=30, users=[];
-    for(let i=0;i<N;i++){ const r=await post("/api/register",{name:"کاربر "+(i+1)}); users.push(r.body); }
-    eq(users.filter(u=>u.id).length, N, `${N} کاربر ثبت‌نام شدند`);
-    const adminId = users[0].id;
-    ok(users.every(u=>u.admin===adminId), "همهٔ پاسخ‌ها «اولین کاربر = مدیر» را تأیید می‌کنند");
+    for(let i=0;i<N;i++){ const r=await post("/api/register",{username:"player"+i, email:`p${i}@mail.com`, password:"pw"+i+"secret"}); users.push(r.body); }
+    eq(users.filter(u=>u.id && u.token).length, N, `${N} کاربر با توکن ثبت‌نام شدند`);
+    const adminId = users[0].id, adminTok = users[0].token;
+    ok(users.every(u=>u.admin===adminId), "اولین کاربر «مدیر» است");
 
-    // ثبت‌نام تکراری همان نام → همان شناسه
-    const dup=await post("/api/register",{name:"کاربر 1"});
-    eq(dup.body.id, adminId, "ثبت‌نام دوبارهٔ نام تکراری، شناسهٔ قبلی را برمی‌گرداند");
+    // --- امنیت ثبت‌نام/ورود ---
+    const dup=await post("/api/register",{username:"player0", email:"x@y.com", password:"whatever"});
+    eq(dup.status, 409, "نام‌کاربری تکراری رد می‌شود (۴۰۹)");
+    const shortPw=await post("/api/register",{username:"newbie", email:"n@y.com", password:"12"});
+    eq(shortPw.status, 400, "رمز خیلی کوتاه رد می‌شود");
 
-    // --- هر کاربر برای همهٔ ۷۲ بازی پیش‌بینی می‌فرستد ---
+    const goodLogin=await post("/api/login",{username:"player3", password:"pw3secret"});
+    eq(goodLogin.status, 200, "ورود با رمز درست موفق است");
+    ok(goodLogin.body.token && goodLogin.body.token!==users[3].token || goodLogin.body.token, "ورود توکن می‌دهد");
+    const badLogin=await post("/api/login",{username:"player3", password:"WRONG"});
+    eq(badLogin.status, 401, "ورود با رمز اشتباه رد می‌شود (۴۰۱)");
+    const noUser=await post("/api/login",{username:"ghost", password:"x"});
+    eq(noUser.status, 401, "ورود با کاربر ناموجود رد می‌شود");
+
+    // --- نشتی نکردن اطلاعات حساس در state ---
+    const pub = await getState();
+    const leak = (pub.users||[]).some(u => "email" in u || "hash" in u || "salt" in u || "token" in u);
+    ok(!leak, "state هیچ ایمیل/هش/سالت/توکنی لو نمی‌دهد (فقط id و name)");
+    ok(pub.preds===undefined, "پیش‌بینی‌های خام همهٔ کاربران در state عمومی نیست");
+
+    // --- پیش‌بینی بدون توکن و با توکن جعلی رد می‌شود ---
+    const noTok = await post("/api/prediction",{matchId:openMatches[0].id,h:1,a:1,s:[]});
+    eq(noTok.status, 401, "پیش‌بینی بدون ورود رد می‌شود");
+    const fakeTok = await post("/api/prediction",{matchId:openMatches[0].id,h:1,a:1,s:[]},"deadbeef");
+    eq(fakeTok.status, 401, "پیش‌بینی با توکن جعلی رد می‌شود");
+
+    // --- جلوگیری از جعل هویت: با توکن خودم ولی userId نفر دیگر، باز هم زیر خودم ثبت می‌شود ---
+    const om = openMatches[0].id;
+    await post("/api/prediction",{userId:users[2].id, matchId:om, h:7, a:0, s:[]}, users[1].token);
+    const u1state = await getState(users[1].token);
+    const u2state = await getState(users[2].token);
+    eq(u1state.myPreds[om] && u1state.myPreds[om].h, 7, "پیش‌بینی زیر صاحب توکن ثبت شد (نه قربانی)");
+    ok(!(u2state.myPreds[om]), "نمی‌توان به‌جای کاربر دیگر پیش‌بینی ثبت کرد (ضدِ جعل هویت)");
+
+    // --- هر کاربر برای همهٔ ۷۲ بازی پیش‌بینی می‌فرستد (با توکن خودش) ---
     let accepted=0, rejectedLocked=0, otherErr=0;
-    // یک کاربر مشخص با پیش‌بینی‌های معلوم برای راستی‌آزماییِ امتیاز
-    const probe = users[1].id;
+    const probe = users[1];
     const probePreds = {};
     for(const u of users){
       for(const m of WC.MATCHES){
         const h=Math.floor(Math.random()*4), a=Math.floor(Math.random()*4);
         const scorers = Math.random()<0.5 ? [WC.TEAMS[m.home].p[0]] : [];
-        const r=await post("/api/prediction",{userId:u.id,matchId:m.id,h,a,s:scorers});
-        if(r.status===200){ accepted++; if(u.id===probe && !WC.isLocked(m,nowN)) probePreds[m.id]={h,a,s:scorers}; }
+        const r=await post("/api/prediction",{matchId:m.id,h,a,s:scorers}, u.token);
+        if(r.status===200){ accepted++; if(u.id===probe.id && !WC.isLocked(m,nowN)) probePreds[m.id]={h,a,s:scorers}; }
         else if(r.status===403){ rejectedLocked++; }
         else otherErr++;
       }
@@ -162,63 +194,52 @@ async function testE2E(){
     eq(accepted, N*openMatches.length, `پیش‌بینی‌های پذیرفته‌شده = ${N}×${openMatches.length}`);
     eq(rejectedLocked, N*lockedMatches.length, `پیش‌بینی روی بازی‌های قفل رد شد = ${N}×${lockedMatches.length}`);
 
-    // --- تأیید اینکه بازی قفل واقعاً در حافظه ذخیره نشده ---
-    let st = await getState();
+    // --- بازی قفل واقعاً ذخیره نشده (از دید توکنِ probe) ---
     const lockedId = lockedMatches[0].id;
-    const anyStoredLocked = Object.values(st.preds).some(p=>p && p[lockedId]);
-    ok(!anyStoredLocked, "هیچ پیش‌بینی‌ای برای بازی قفل‌شده ذخیره نشده است");
+    const probeState = await getState(probe.token);
+    ok(!probeState.myPreds[lockedId], "هیچ پیش‌بینی‌ای برای بازی قفل ذخیره نشده");
 
-    // --- کاربر غیرمدیر نمی‌تواند نتیجه ثبت کند ---
-    const badRes = await post("/api/result",{userId:users[5].id,matchId:"m1",h:1,a:0,s:[]});
+    // --- کاربر عادی نمی‌تواند نتیجه ثبت کند ---
+    const badRes = await post("/api/result",{matchId:"m1",h:1,a:0,s:[]}, users[5].token);
     eq(badRes.status, 403, "کاربر عادی اجازهٔ ثبت نتیجه ندارد");
 
-    // --- کاربر نامعتبر ---
-    const badUser = await post("/api/prediction",{userId:"hacker",matchId:openMatches[0].id,h:1,a:1,s:[]});
-    eq(badUser.status, 401, "کاربر نامعتبر رد می‌شود");
-
     // --- مدیر نتیجهٔ همهٔ بازی‌ها را ثبت می‌کند ---
-    let resErr=0;
-    const results={};
+    let resErr=0; const results={};
     for(const m of WC.MATCHES){
       const h=Math.floor(Math.random()*4), a=Math.floor(Math.random()*4);
       const s = Math.random()<0.6 ? [WC.TEAMS[m.home].p[0]] : [];
       results[m.id]={h,a,s};
-      const r=await post("/api/result",{userId:adminId,matchId:m.id,h,a,s});
+      const r=await post("/api/result",{matchId:m.id,h,a,s}, adminTok);
       if(r.status!==200) resErr++;
     }
     eq(resErr, 0, "مدیر همهٔ ۷۲ نتیجه را بدون خطا ثبت کرد");
 
-    // --- جدول امتیازات و راستی‌آزمایی ---
-    st = await getState();
-    const lb = WC.leaderboard(st.users, st.preds, st.results, st.cfg);
+    // --- جدول امتیازاتِ سرور و راستی‌آزمایی مستقل ---
+    let st = await getState();
+    const lb = st.leaderboard;
     eq(lb.length, N, "جدول شامل همهٔ کاربران است");
     let sorted=true; for(let i=1;i<lb.length;i++) if(lb[i-1].total<lb[i].total) sorted=false;
     ok(sorted, "جدول به‌درستی نزولی مرتب است");
 
-    // امتیاز کاربر probe را مستقل بازحساب می‌کنیم و با حافظهٔ سرور مقایسه می‌کنیم
     let expected=0;
     for(const mid in probePreds){ const d=WC.scoreOne(probePreds[mid], st.results[mid], st.cfg); if(d) expected+=d.total; }
-    const probeRow = lb.find(r=>r.id===probe);
-    eq(probeRow.total, expected, "امتیاز کاربر نمونه با بازحساب مستقل برابر است");
+    eq(lb.find(r=>r.id===probe.id).total, expected, "امتیاز کاربر نمونه با بازحساب مستقل برابر است");
 
-    // --- تغییر تنظیمات امتیاز توسط مدیر ---
-    const cfgRes = await post("/api/config",{userId:adminId,cfg:{pOutcome:5,pOneTeam:1,pExact:10,pScorer:3}});
-    eq(cfgRes.status, 200, "مدیر تنظیمات امتیاز را تغییر داد");
-    st = await getState();
-    eq(st.cfg.pExact, 10, "تنظیم جدید امتیاز ذخیره شد");
+    // --- تغییر تنظیمات امتیاز و انتقال مدیر (با توکن مدیر) ---
+    eq((await post("/api/config",{cfg:{pOutcome:5,pOneTeam:1,pExact:10,pScorer:3}}, adminTok)).status, 200, "مدیر تنظیمات را تغییر داد");
+    st = await getState(); eq(st.cfg.pExact, 10, "تنظیم جدید ذخیره شد");
+    eq((await post("/api/admin/transfer",{target:users[2].id}, adminTok)).status, 200, "نقش مدیر منتقل شد");
+    st = await getState(); eq(st.admin, users[2].id, "مدیر جدید ثبت شد");
+    eq((await post("/api/config",{cfg:WC.DEFAULT_CFG}, adminTok)).status, 403, "مدیر قبلی دیگر دسترسی ندارد");
 
-    // --- انتقال نقش مدیر ---
-    const tr = await post("/api/admin/transfer",{userId:adminId,target:users[2].id});
-    eq(tr.status, 200, "نقش مدیر منتقل شد");
-    st = await getState();
-    eq(st.admin, users[2].id, "مدیر جدید ثبت شد");
-    // مدیر قبلی دیگر اجازه ندارد
-    const ex = await post("/api/config",{userId:adminId,cfg:WC.DEFAULT_CFG});
-    eq(ex.status, 403, "مدیر قبلی دیگر دسترسی مدیریتی ندارد");
+    // --- خروج، توکن را باطل می‌کند ---
+    eq((await post("/api/logout",{}, users[6].token)).status, 200, "خروج موفق است");
+    eq((await post("/api/prediction",{matchId:om,h:1,a:1,s:[]}, users[6].token)).status, 401, "توکن بعد از خروج باطل است");
 
-    // --- پایداری: داده‌ها واقعاً روی دیسک ذخیره شده‌اند ---
+    // --- پایداری روی دیسک ---
     const onDisk = JSON.parse(fs.readFileSync(DATA,"utf8"));
-    eq(onDisk.users.length, N, "داده‌ها روی دیسک ذخیره شده‌اند (پایداری بین ری‌استارت)");
+    eq(onDisk.users.length, N, "داده‌ها روی دیسک ذخیره شده‌اند");
+    ok(onDisk.users.every(u=>u.hash && u.salt && !( "password" in u )), "رمزها فقط به‌صورت هش ذخیره شده‌اند (نه متن خام)");
 
   } finally {
     srv.kill();

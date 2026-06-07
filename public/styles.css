@@ -129,3 +129,8 @@ body{margin:0}
   .tname{font-size:13.5px;max-width:92px}
   .logo h1{font-size:18px}
 }
+
+/* auth (login/register) tabs in the gate */
+.authtabs{display:flex;gap:6px;background:var(--bg2);border:1px solid var(--line);border-radius:12px;padding:5px;margin-bottom:14px}
+.authtabs button{flex:1;border:0;background:transparent;color:var(--muted);font-family:inherit;font-weight:700;font-size:14px;padding:9px;border-radius:8px;cursor:pointer;transition:.15s}
+.authtabs button.on{background:linear-gradient(135deg,var(--accent),var(--blue));color:#04220f}

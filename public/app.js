@@ -6,31 +6,51 @@
   const $app = document.getElementById("app");
 
   // ---------- state ----------
-  let S = { users:[], admin:null, cfg:WC.DEFAULT_CFG, results:{}, preds:{} };
-  let ME = localStorage.getItem("wc26_me") || null;     // فقط برای راحتیِ همین مرورگر
+  let TOKEN = localStorage.getItem("wc26_token") || null;
+  let S = { users:[], admin:null, cfg:WC.DEFAULT_CFG, results:{}, leaderboard:[], me:null, myPreds:{} };
+  let ME = null;                       // شناسهٔ کاربرِ واردشده
   let TAB = "predict";
+  let GATE_MODE = "login";             // login | register
   let FILTER = { only:"upcoming", group:"all" };
   let ADMIN_VIEW = "results";
-  let SERVER_OFFSET = 0;                                  // serverNow - clientNow
+  let SERVER_OFFSET = 0;               // serverNow - clientNow
 
   const nowMs = () => Date.now() + SERVER_OFFSET;
-  const myPreds = () => (ME && S.preds[ME]) || {};
-  const meUser = () => S.users.find(u=>u.id===ME);
-  const isAdmin = () => ME && S.admin===ME;
+  const myPreds = () => S.myPreds || {};
+  const meUser = () => S.me;
+  const isAdmin = () => S.me && S.admin === S.me.id;
 
   // ---------- api ----------
+  function authHeaders(extra){ const h = extra ? { ...extra } : {}; if(TOKEN) h["Authorization"] = "Bearer " + TOKEN; return h; }
   async function getState(){
-    const r = await fetch("/api/state");
+    const r = await fetch("/api/state", { headers: authHeaders() });
     const d = await r.json();
     SERVER_OFFSET = (Number(d.now)||Date.now()) - Date.now();
-    S = { users:d.users||[], admin:d.admin||null, cfg:d.cfg||WC.DEFAULT_CFG, results:d.results||{}, preds:d.preds||{} };
+    S = { users:d.users||[], admin:d.admin||null, cfg:d.cfg||WC.DEFAULT_CFG, results:d.results||{},
+          leaderboard:d.leaderboard||[], me:d.me||null, myPreds:d.myPreds||{} };
+    ME = S.me ? S.me.id : null;
     return S;
   }
   async function post(path, body){
-    const r = await fetch(path, { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(body) });
+    const r = await fetch(path, { method:"POST", headers: authHeaders({ "Content-Type":"application/json" }), body:JSON.stringify(body||{}) });
     const d = await r.json().catch(()=>({}));
     if(!r.ok) throw new Error(d.error || ("خطا "+r.status));
     return d;
+  }
+  async function doRegister(username, email, password){
+    const d = await post("/api/register", { username, email, password });
+    TOKEN = d.token; localStorage.setItem("wc26_token", TOKEN);
+    await getState(); render();
+  }
+  async function doLogin(username, password){
+    const d = await post("/api/login", { username, password });
+    TOKEN = d.token; localStorage.setItem("wc26_token", TOKEN);
+    await getState(); render();
+  }
+  function logout(){
+    post("/api/logout", {}).catch(()=>{});
+    TOKEN = null; localStorage.removeItem("wc26_token");
+    S.me = null; ME = null; GATE_MODE = "login"; render();
   }
 
   // ---------- helpers ----------
@@ -57,7 +77,7 @@
           <div class="who">
             <span class="chip-user">${isAdmin()?"🛡️ ":""}${esc(u.name)}</span>
             <button class="iconbtn" data-act="refresh" title="به‌روزرسانی">↻</button>
-            <button class="iconbtn" data-act="logout">تغییر کاربر</button>
+            <button class="iconbtn" data-act="logout">خروج</button>
           </div>
         </header>
         <nav class="tabs">
@@ -84,26 +104,42 @@
     bindView();
   }
 
-  // ---------- gate ----------
+  // ---------- gate (login / register) ----------
   function renderGate(){
+    const m = GATE_MODE;
     $app.innerHTML = `<div class="gate"><div class="box">
       <div class="big">🏆</div>
       <h2>جام پیش‌بینی ۲۰۲۶</h2>
-      <p>اسمت رو وارد کن تا پیش‌بینی‌هات ثبت و امتیازت در جدول مشترک محاسبه بشه.</p>
-      ${S.users.length? `<div class="userpick">${S.users.map(u=>`<button data-pick="${u.id}">${esc(u.name)}</button>`).join("")}</div>
-        <div class="divider"><span class="ln"></span>یا کاربر جدید<span class="ln"></span></div>`:""}
-      <input id="gname" placeholder="نام شما…" maxlength="40"/>
-      <button class="btn primary" style="width:100%;justify-content:center" data-act="register">✓ ورود به بازی</button>
-      <div class="note">اولین کسی که وارد می‌شود «مدیر» بازی خواهد بود و مسئول ثبت نتایج واقعی است. بقیهٔ دوستان فقط پیش‌بینی می‌کنند.</div>
+      <p>${m==="login" ? "برای ادامه وارد حسابت شو." : "یک حساب بساز تا فقط خودت بتوانی پیش‌بینی‌هایت را ثبت و ویرایش کنی."}</p>
+      <div class="authtabs">
+        <button class="${m==="login"?"on":""}" data-mode="login">ورود</button>
+        <button class="${m==="register"?"on":""}" data-mode="register">ثبت‌نام</button>
+      </div>
+      <input id="g-user" placeholder="نام‌کاربری" maxlength="30" autocomplete="username"/>
+      ${m==="register" ? `<input id="g-email" type="email" placeholder="ایمیل" maxlength="120" autocomplete="email"/>` : ""}
+      <input id="g-pass" type="password" placeholder="رمز عبور" autocomplete="${m==="login"?"current-password":"new-password"}"/>
+      <button class="btn primary" style="width:100%;justify-content:center" data-act="submit">${m==="login"?"✓ ورود":"✓ ساخت حساب"}</button>
+      <div class="note">${m==="register"
+        ? "اولین کسی که ثبت‌نام کند «مدیر» بازی می‌شود (ثبت نتایج واقعی). ایمیل فقط برای شناساییِ حساب است و در سایت به کسی نشان داده نمی‌شود."
+        : "حساب نداری؟ از بالا «ثبت‌نام» را بزن."}</div>
     </div></div>`;
-    $app.querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ ME=b.dataset.pick; localStorage.setItem("wc26_me",ME); render(); });
-    const inp=document.getElementById("gname");
-    const reg=async()=>{ const name=inp.value.trim(); if(!name) return;
-      try{ const d=await post("/api/register",{name}); await getState(); ME=d.id; localStorage.setItem("wc26_me",ME); render(); }
-      catch(e){ toast(e.message,true); } };
-    $app.querySelector('[data-act="register"]').onclick=reg;
-    inp.onkeydown=e=>{ if(e.key==="Enter") reg(); };
-    inp.focus();
+    $app.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{ GATE_MODE=b.dataset.mode; renderGate(); });
+    const submit=async()=>{
+      const user=document.getElementById("g-user").value.trim();
+      const pass=document.getElementById("g-pass").value;
+      if(!user||!pass){ toast("نام‌کاربری و رمز را وارد کن",true); return; }
+      try{
+        if(m==="register"){
+          const email=(document.getElementById("g-email")||{value:""}).value.trim();
+          if(!/^\S+@\S+\.\S+$/.test(email)){ toast("ایمیل معتبر وارد کن",true); return; }
+          if(pass.length<4){ toast("رمز عبور حداقل ۴ کاراکتر",true); return; }
+          await doRegister(user,email,pass);
+        } else await doLogin(user,pass);
+      }catch(e){ toast(e.message,true); }
+    };
+    $app.querySelector('[data-act="submit"]').onclick=submit;
+    $app.querySelectorAll(".gate input").forEach(i=>i.onkeydown=e=>{ if(e.key==="Enter") submit(); });
+    document.getElementById("g-user").focus();
   }
 
   // ---------- predict ----------
@@ -186,7 +222,7 @@
 
   // ---------- board ----------
   function viewBoard(){
-    const rows = WC.leaderboard(S.users, S.preds, S.results, S.cfg);
+    const rows = S.leaderboard || [];
     const anyResult = Object.values(S.results).some(r=>r&&r.h!=null);
     let html=`<div class="section"><div class="lb">`;
     if(!rows.length) html+=`<div class="empty">هنوز کاربری ثبت‌نام نکرده.</div>`;
@@ -326,7 +362,7 @@
   function bindGlobal(){
     $app.querySelectorAll("[data-tab]").forEach(b=>b.onclick=async()=>{ TAB=b.dataset.tab; try{await getState();}catch{} renderView(); updateTabs(); });
     const rf=$app.querySelector('[data-act="refresh"]'); if(rf) rf.onclick=async()=>{ try{await getState(); renderView(); toast("به‌روزرسانی شد");}catch(e){toast(e.message,true);} };
-    const lo=$app.querySelector('[data-act="logout"]'); if(lo) lo.onclick=()=>{ ME=null; localStorage.removeItem("wc26_me"); render(); };
+    const lo=$app.querySelector('[data-act="logout"]'); if(lo) lo.onclick=()=>{ logout(); };
   }
   function updateTabs(){ $app.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("active", b.dataset.tab===TAB)); }
 
@@ -378,7 +414,8 @@
   // ---------- boot ----------
   (async function(){
     try{ await getState(); }catch(e){ $app.innerHTML=`<div class="empty">اتصال به سرور ممکن نشد. مطمئن شو سرور اجراست.</div>`; return; }
-    if(ME && !meUser()) { ME=null; localStorage.removeItem("wc26_me"); }
+    if(TOKEN && !S.me){ TOKEN=null; localStorage.removeItem("wc26_token"); } // توکن منقضی/نامعتبر
+    GATE_MODE = (S.users && S.users.length) ? "login" : "register";
     render();
   })();
 })();

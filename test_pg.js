@@ -58,29 +58,33 @@ async function serverPgBranch(){
     ok(up, "سرورِ متصل به Postgres بالا آمد");
     if(!up) return;
 
-    const post=async(p,b)=>{ const r=await fetch(base+p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)}); return {status:r.status, body:await r.json().catch(()=>({}))}; };
+    const post=async(p,b,token)=>{ const headers={"Content-Type":"application/json"}; if(token) headers["Authorization"]="Bearer "+token; const r=await fetch(base+p,{method:"POST",headers,body:JSON.stringify(b||{})}); return {status:r.status, body:await r.json().catch(()=>({}))}; };
     const getState=async()=>(await fetch(base+"/api/state")).json();
 
     const nowN = Number(TEST_NOW);
     const open = WC.MATCHES.find(m=>!WC.isLocked(m,nowN));
     const lockedM = WC.MATCHES.find(m=>WC.isLocked(m,nowN));
 
-    const u=[]; for(let i=0;i<5;i++) u.push((await post("/api/register",{name:"P"+i})).body);
-    eq(u.filter(x=>x.id).length,5,"۵ کاربر روی Postgres ثبت‌نام شدند");
-    const admin=u[0].id;
+    const u=[]; for(let i=0;i<5;i++) u.push((await post("/api/register",{username:"P"+i, email:`p${i}@m.com`, password:"secret"+i})).body);
+    eq(u.filter(x=>x.id && x.token).length,5,"۵ کاربر روی Postgres ثبت‌نام شدند (با توکن)");
+    const adminTok=u[0].token;
 
-    const a1=await post("/api/prediction",{userId:u[1].id,matchId:open.id,h:2,a:1,s:[WC.TEAMS[open.home].p[0]]});
+    const a1=await post("/api/prediction",{matchId:open.id,h:2,a:1,s:[WC.TEAMS[open.home].p[0]]}, u[1].token);
     eq(a1.status,200,"پیش‌بینی روی بازی باز پذیرفته شد (Postgres)");
-    const a2=await post("/api/prediction",{userId:u[1].id,matchId:lockedM.id,h:1,a:0,s:[]});
+    const a2=await post("/api/prediction",{matchId:lockedM.id,h:1,a:0,s:[]}, u[1].token);
     eq(a2.status,403,"پیش‌بینی روی بازی قفل رد شد (Postgres)");
 
-    const rr=await post("/api/result",{userId:admin,matchId:open.id,h:2,a:1,s:[WC.TEAMS[open.home].p[0]]});
+    const rr=await post("/api/result",{matchId:open.id,h:2,a:1,s:[WC.TEAMS[open.home].p[0]]}, adminTok);
     eq(rr.status,200,"مدیر نتیجه را روی Postgres ثبت کرد");
 
+    // ورود مجدد با رمز درست
+    const lg=await post("/api/login",{username:"P1", password:"secret1"});
+    eq(lg.status,200,"ورود مجدد روی Postgres کار می‌کند");
+
     const st=await getState();
-    ok(st.preds[u[1].id] && st.preds[u[1].id][open.id], "پیش‌بینی در Postgres ذخیره و بازخوانده شد");
-    const lb=WC.leaderboard(st.users,st.preds,st.results,st.cfg);
+    const lb=st.leaderboard;
     eq(lb.find(r=>r.id===u[1].id).total, 10, "امتیاز از وضعیتِ Postgres درست محاسبه شد (3+5+2)");
+    ok(!(st.users||[]).some(x=>"hash" in x || "email" in x), "state در Postgres هم اطلاعات حساس لو نمی‌دهد");
   } finally { srv.kill(); }
 }
 

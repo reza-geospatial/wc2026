@@ -1,24 +1,24 @@
 /* ============================================================
-   server.js  —  سرور بدون وابستگی (فقط ماژول‌های داخلی Node)
+   server.js  —  سرور بدون وابستگیِ زمان‌اجرا (به‌جز pg برای حالت Postgres)
+   احراز هویت: نام‌کاربری + رمز عبور (هشِ scrypt) + توکن نشست.
    اجرا:  node server.js   (پیش‌فرض پورت 3000)
-   داده‌ها در فایل data.json ذخیره می‌شوند.
    ============================================================ */
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const WC = require("./public/shared.js");
 
 const PORT = Number(process.env.PORT || 3000);
 const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, "data.json");
 const PUBLIC = path.join(__dirname, "public");
 
-// «اکنون» — در حالت تست با متغیر محیطی TEST_NOW قابل تنظیم است (در تولید استفاده نمی‌شود)
 function now(){ return process.env.TEST_NOW ? Number(process.env.TEST_NOW) : Date.now(); }
 
 /* ---------- persistence (Postgres اگر DATABASE_URL باشد، وگرنه فایل) ---------- */
 const USE_PG = !!process.env.DATABASE_URL;
 let pool = null;
-const DEFAULT_DB = () => ({ users: [], admin: null, cfg: { ...WC.DEFAULT_CFG }, results: {}, preds: {} });
+const DEFAULT_DB = () => ({ users: [], sessions: {}, admin: null, cfg: { ...WC.DEFAULT_CFG }, results: {}, preds: {} });
 let DB = DEFAULT_DB();
 
 function normalizeDB(){
@@ -27,7 +27,14 @@ function normalizeDB(){
   if(!DB.preds) DB.preds = {};
   if(!DB.results) DB.results = {};
   if(!DB.users) DB.users = [];
+  if(!DB.sessions) DB.sessions = {};
   if(DB.admin === undefined) DB.admin = null;
+  // مهاجرت: حساب‌های قدیمیِ بدون رمز (فقط-اسم) حذف می‌شوند تا امنیت برقرار شود
+  DB.users = DB.users.filter(u => u && u.id && u.hash && u.salt);
+  const valid = new Set(DB.users.map(u => u.id));
+  const np = {}; for(const k in DB.preds) if(valid.has(k)) np[k] = DB.preds[k]; DB.preds = np;
+  const ns = {}; for(const t in DB.sessions) if(valid.has(DB.sessions[t])) ns[t] = DB.sessions[t]; DB.sessions = ns;
+  if(DB.admin && !valid.has(DB.admin)) DB.admin = null;
 }
 
 async function load(){
@@ -70,12 +77,37 @@ function save(){
   }
 }
 
-/* ---------- helpers ---------- */
-const uid = () => "u" + Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-3);
+/* ---------- auth helpers ---------- */
+const uid = () => "u" + crypto.randomBytes(6).toString("hex");
+const makeToken = () => crypto.randomBytes(32).toString("hex");
+function hashPw(password, salt){ return crypto.scryptSync(String(password), salt, 32).toString("hex"); }
+function verifyPw(password, salt, hash){
+  try{
+    const h = Buffer.from(hashPw(password, salt), "hex");
+    const k = Buffer.from(hash, "hex");
+    return h.length === k.length && crypto.timingSafeEqual(h, k);
+  }catch{ return false; }
+}
+function isUser(id){ return DB.users.some(u => u.id === id); }
+function userByName(name){ return DB.users.find(u => WC.norm(u.name) === WC.norm(name)); }
+function tokenFrom(req, body){
+  const h = req.headers["authorization"] || "";
+  if(h.startsWith("Bearer ")) return h.slice(7).trim();
+  if(body && body.token) return String(body.token);
+  return null;
+}
+function authUid(req, body){
+  const t = tokenFrom(req, body);
+  if(!t) return null;
+  const id = DB.sessions[t];
+  return (id && isUser(id)) ? id : null;
+}
+const pubUser = u => ({ id: u.id, name: u.name });
+
+/* ---------- http helpers ---------- */
 function send(res, code, obj){
-  const body = JSON.stringify(obj);
   res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" });
-  res.end(body);
+  res.end(JSON.stringify(obj));
 }
 function readBody(req){
   return new Promise((resolve) => {
@@ -89,7 +121,6 @@ function cleanScorers(arr){
   if(!Array.isArray(arr)) return [];
   return arr.map(s => String(s||"").trim()).filter(Boolean).slice(0,8);
 }
-function isUser(id){ return DB.users.some(u => u.id === id); }
 
 /* ---------- static ---------- */
 const MIME = { ".html":"text/html; charset=utf-8", ".js":"text/javascript; charset=utf-8",
@@ -111,67 +142,96 @@ function serveStatic(req, res){
 async function api(req, res, url){
   const method = req.method;
 
-  // وضعیت کامل بازی برای کلاینت
+  // وضعیت بازی؛ با توکن معتبر، پیش‌بینی‌های خودِ کاربر هم برگردانده می‌شود
   if(url === "/api/state" && method === "GET"){
+    const meId = authUid(req, null);
+    const me = meId ? pubUser(DB.users.find(u => u.id === meId)) : null;
     return send(res, 200, {
-      now: now(), users: DB.users, admin: DB.admin, cfg: DB.cfg,
-      results: DB.results, preds: DB.preds
+      now: now(),
+      users: DB.users.map(pubUser),
+      admin: DB.admin,
+      cfg: DB.cfg,
+      results: DB.results,
+      leaderboard: WC.leaderboard(DB.users, DB.preds, DB.results, DB.cfg),
+      me,
+      myPreds: meId ? (DB.preds[meId] || {}) : {},
     });
   }
 
   if(url === "/api/register" && method === "POST"){
-    const { name } = await readBody(req);
-    const nm = String(name||"").trim().slice(0,40);
-    if(!nm) return send(res, 400, { error: "نام لازم است" });
-    let u = DB.users.find(x => WC.norm(x.name) === WC.norm(nm));
-    if(!u){
-      u = { id: uid(), name: nm };
-      DB.users.push(u);
-      if(!DB.preds[u.id]) DB.preds[u.id] = {};
-      if(!DB.admin) DB.admin = u.id;   // اولین کاربر = مدیر
-      save();
-    }
-    return send(res, 200, { id: u.id, name: u.name, admin: DB.admin });
+    const { username, password, email } = await readBody(req);
+    const name = String(username||"").trim().slice(0,30);
+    const pw = String(password||"");
+    if(name.length < 2) return send(res, 400, { error: "نام‌کاربری حداقل ۲ حرف" });
+    if(pw.length < 4)   return send(res, 400, { error: "رمز عبور حداقل ۴ کاراکتر" });
+    if(userByName(name)) return send(res, 409, { error: "این نام‌کاربری قبلاً گرفته شده" });
+    const salt = crypto.randomBytes(16).toString("hex");
+    const u = { id: uid(), name, salt, hash: hashPw(pw, salt), email: String(email||"").trim().slice(0,120) };
+    DB.users.push(u);
+    DB.preds[u.id] = {};
+    if(!DB.admin) DB.admin = u.id;
+    const token = makeToken(); DB.sessions[token] = u.id;
+    save();
+    return send(res, 200, { token, id: u.id, name: u.name, admin: DB.admin });
+  }
+
+  if(url === "/api/login" && method === "POST"){
+    const { username, password } = await readBody(req);
+    const u = userByName(String(username||"").trim());
+    if(!u || !verifyPw(String(password||""), u.salt, u.hash))
+      return send(res, 401, { error: "نام‌کاربری یا رمز عبور اشتباه است" });
+    const token = makeToken(); DB.sessions[token] = u.id;
+    save();
+    return send(res, 200, { token, id: u.id, name: u.name, admin: DB.admin });
+  }
+
+  if(url === "/api/logout" && method === "POST"){
+    const t = tokenFrom(req, await readBody(req));
+    if(t && DB.sessions[t]){ delete DB.sessions[t]; save(); }
+    return send(res, 200, { ok: true });
   }
 
   if(url === "/api/prediction" && method === "POST"){
-    const { userId, matchId, h, a, s } = await readBody(req);
-    if(!isUser(userId)) return send(res, 401, { error: "کاربر نامعتبر" });
-    const m = WC.MATCH_BY_ID[matchId];
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(!meId) return send(res, 401, { error: "لطفاً وارد شوید" });
+    const m = WC.MATCH_BY_ID[body.matchId];
     if(!m) return send(res, 404, { error: "بازی پیدا نشد" });
-    // *** قفل سمت سرور: بعد از سوت شروع، پیش‌بینی پذیرفته نمی‌شود ***
-    if(WC.isLocked(m, now())) return send(res, 403, { error: "این بازی قفل شده است (شروع شده/تمام شده)" });
-    const H = clampGoals(h), A = clampGoals(a);
+    if(WC.isLocked(m, now())) return send(res, 403, { error: "این بازی قفل شده است" });
+    const H = clampGoals(body.h), A = clampGoals(body.a);
     if(H==null || A==null) return send(res, 400, { error: "نتیجهٔ نامعتبر" });
-    if(!DB.preds[userId]) DB.preds[userId] = {};
-    DB.preds[userId][matchId] = { h: H, a: A, s: cleanScorers(s).slice(0,2) };
+    if(!DB.preds[meId]) DB.preds[meId] = {};
+    DB.preds[meId][body.matchId] = { h: H, a: A, s: cleanScorers(body.s).slice(0,2) };
     save();
     return send(res, 200, { ok: true });
   }
 
   if(url === "/api/result" && method === "POST"){
-    const { userId, matchId, h, a, s } = await readBody(req);
-    if(userId !== DB.admin) return send(res, 403, { error: "فقط مدیر می‌تواند نتیجه ثبت کند" });
-    const m = WC.MATCH_BY_ID[matchId];
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(meId !== DB.admin) return send(res, 403, { error: "فقط مدیر می‌تواند نتیجه ثبت کند" });
+    const m = WC.MATCH_BY_ID[body.matchId];
     if(!m) return send(res, 404, { error: "بازی پیدا نشد" });
-    const H = clampGoals(h), A = clampGoals(a);
+    const H = clampGoals(body.h), A = clampGoals(body.a);
     if(H==null || A==null) return send(res, 400, { error: "نتیجهٔ نامعتبر" });
-    DB.results[matchId] = { h: H, a: A, s: cleanScorers(s) };
+    DB.results[body.matchId] = { h: H, a: A, s: cleanScorers(body.s) };
     save();
     return send(res, 200, { ok: true });
   }
 
   if(url === "/api/result/delete" && method === "POST"){
-    const { userId, matchId } = await readBody(req);
-    if(userId !== DB.admin) return send(res, 403, { error: "فقط مدیر" });
-    delete DB.results[matchId]; save();
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(meId !== DB.admin) return send(res, 403, { error: "فقط مدیر" });
+    delete DB.results[body.matchId]; save();
     return send(res, 200, { ok: true });
   }
 
   if(url === "/api/config" && method === "POST"){
-    const { userId, cfg } = await readBody(req);
-    if(userId !== DB.admin) return send(res, 403, { error: "فقط مدیر" });
-    const c = cfg || {};
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(meId !== DB.admin) return send(res, 403, { error: "فقط مدیر" });
+    const c = body.cfg || {};
     DB.cfg = {
       pOutcome: Math.max(0, Number(c.pOutcome)||0),
       pOneTeam: Math.max(0, Number(c.pOneTeam)||0),
@@ -183,17 +243,17 @@ async function api(req, res, url){
   }
 
   if(url === "/api/admin/transfer" && method === "POST"){
-    const { userId, target } = await readBody(req);
-    if(userId !== DB.admin) return send(res, 403, { error: "فقط مدیر" });
-    if(!isUser(target)) return send(res, 404, { error: "کاربر هدف نامعتبر" });
-    DB.admin = target; save();
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(meId !== DB.admin) return send(res, 403, { error: "فقط مدیر" });
+    if(!isUser(body.target)) return send(res, 404, { error: "کاربر هدف نامعتبر" });
+    DB.admin = body.target; save();
     return send(res, 200, { ok: true, admin: DB.admin });
   }
 
   return send(res, 404, { error: "مسیر نامعتبر" });
 }
 
-/* ---------- router ---------- */
 const server = http.createServer((req, res) => {
   const url = req.url.split("?")[0];
   if(url.startsWith("/api/")) return api(req, res, url).catch(e => send(res, 500, { error: String(e) }));

@@ -47,6 +47,7 @@
     const d = await post("/api/login", { username, password });
     TOKEN = d.token; localStorage.setItem("wc26_token", TOKEN);
     await getState(); render();
+    if(d.recoveryCode) showRecoveryModal(d.recoveryCode);
   }
   async function doRecover(username, recoveryCode, newPassword){
     const d = await post("/api/recover", { username, recoveryCode, newPassword });
@@ -119,8 +120,8 @@
     const t=document.createElement("div"); t.className="toast"+(err?" err":""); t.textContent=msg;
     document.body.appendChild(t); setTimeout(()=>t.remove(), 2600);
   }
-  function fmtDate(dt){ try{ return new Date(dt).toLocaleString("fa-IR",{weekday:"short",month:"long",day:"numeric",hour:"2-digit",minute:"2-digit"});}catch{ return new Date(dt).toLocaleString(); } }
-  function dayKey(dt){ try{ return new Date(dt).toLocaleDateString("fa-IR",{weekday:"long",month:"long",day:"numeric"});}catch{ return new Date(dt).toDateString(); } }
+  function fmtDate(dt){ try{ return new Date(dt).toLocaleString("en-GB",{weekday:"short",month:"short",day:"numeric",hour:"2-digit",minute:"2-digit",hour12:false});}catch{ return new Date(dt).toLocaleString("en-GB"); } }
+  function dayKey(dt){ try{ return new Date(dt).toLocaleDateString("en-GB",{weekday:"long",month:"long",day:"numeric"});}catch{ return new Date(dt).toDateString(); } }
   const locked = m => WC.isLocked(m, nowMs());
 
   // ============================================================ render

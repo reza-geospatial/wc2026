@@ -18,21 +18,25 @@ function now(){ return process.env.TEST_NOW ? Number(process.env.TEST_NOW) : Dat
 /* ---------- persistence (Postgres اگر DATABASE_URL باشد، وگرنه فایل) ---------- */
 const USE_PG = !!process.env.DATABASE_URL;
 let pool = null;
-const DEFAULT_DB = () => ({ users: [], sessions: {}, admin: null, cfg: { ...WC.DEFAULT_CFG }, results: {}, preds: {} });
+const DEFAULT_DB = () => ({ users: [], sessions: {}, admin: null, cfg: { ...WC.DEFAULT_CFG }, results: {}, preds: {}, champPreds: {}, champion: null });
 let DB = DEFAULT_DB();
 
 function normalizeDB(){
   if(!DB || typeof DB !== "object") DB = DEFAULT_DB();
   if(!DB.cfg) DB.cfg = { ...WC.DEFAULT_CFG };
+  if(DB.cfg.pChampion == null) DB.cfg.pChampion = WC.DEFAULT_CFG.pChampion; // افزایشی: امتیاز قهرمان بدون دست‌زدن به وزن‌های قبلی
   if(!DB.preds) DB.preds = {};
   if(!DB.results) DB.results = {};
   if(!DB.users) DB.users = [];
   if(!DB.sessions) DB.sessions = {};
+  if(!DB.champPreds) DB.champPreds = {};   // پیش‌بینی قهرمان (جدا از preds)
+  if(DB.champion === undefined) DB.champion = null;
   if(DB.admin === undefined) DB.admin = null;
   // مهاجرت: حساب‌های قدیمیِ بدون رمز (فقط-اسم) حذف می‌شوند تا امنیت برقرار شود
   DB.users = DB.users.filter(u => u && u.id && u.hash && u.salt);
   const valid = new Set(DB.users.map(u => u.id));
   const np = {}; for(const k in DB.preds) if(valid.has(k)) np[k] = DB.preds[k]; DB.preds = np;
+  const ncp = {}; for(const k in DB.champPreds) if(valid.has(k)) ncp[k] = DB.champPreds[k]; DB.champPreds = ncp;
   const ns = {}; for(const t in DB.sessions) if(valid.has(DB.sessions[t])) ns[t] = DB.sessions[t]; DB.sessions = ns;
   if(DB.admin && !valid.has(DB.admin)) DB.admin = null;
 }
@@ -173,9 +177,11 @@ async function api(req, res, url){
       admin: DB.admin,
       cfg: DB.cfg,
       results: DB.results,
-      leaderboard: WC.leaderboard(DB.users, DB.preds, DB.results, DB.cfg),
+      champion: DB.champion,
+      leaderboard: WC.leaderboard(DB.users, DB.preds, DB.results, DB.cfg, DB.champPreds, DB.champion),
       me,
       myPreds: meId ? (DB.preds[meId] || {}) : {},
+      myChamp: meId ? (DB.champPreds[meId] || null) : null,
     });
   }
 
@@ -202,9 +208,12 @@ async function api(req, res, url){
     const u = userByName(String(username||"").trim());
     if(!u || !verifyPw(String(password||""), u.salt, u.hash))
       return send(res, 401, { error: "نام‌کاربری یا رمز عبور اشتباه است" });
+    // ترمیم خودکار: حساب‌های قدیمی/ریست‌شده که کد بازیابی ندارند، یک‌بار کد می‌گیرند
+    let recoveryCode;
+    if(!u.recHash) recoveryCode = setRecovery(u);
     const token = makeToken(); DB.sessions[token] = u.id;
     save();
-    return send(res, 200, { token, id: u.id, name: u.name, admin: DB.admin });
+    return send(res, 200, { token, id: u.id, name: u.name, admin: DB.admin, recoveryCode });
   }
 
   if(url === "/api/logout" && method === "POST"){
@@ -303,6 +312,7 @@ async function api(req, res, url){
       pOneTeam: Math.max(0, Number(c.pOneTeam)||0),
       pExact:   Math.max(0, Number(c.pExact)||0),
       pScorer:  Math.max(0, Number(c.pScorer)||0),
+      pChampion:Math.max(0, Number(c.pChampion!=null?c.pChampion:DB.cfg.pChampion)||0),
     };
     save();
     return send(res, 200, { ok: true, cfg: DB.cfg });
@@ -315,6 +325,29 @@ async function api(req, res, url){
     if(!isUser(body.target)) return send(res, 404, { error: "کاربر هدف نامعتبر" });
     DB.admin = body.target; save();
     return send(res, 200, { ok: true, admin: DB.admin });
+  }
+
+  // پیش‌بینی قهرمان توسط کاربر (فقط تا قبل از شروع تورنمنت)
+  if(url === "/api/champion" && method === "POST"){
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(!meId) return send(res, 401, { error: "لطفاً وارد شوید" });
+    if(WC.championLocked(now())) return send(res, 403, { error: "مهلت پیش‌بینی قهرمان (۲۵ ژوئن) گذشته است" });
+    const team = String(body.team||"");
+    if(WC.CHAMP_TEAMS.indexOf(team) < 0) return send(res, 400, { error: "تیم نامعتبر" });
+    DB.champPreds[meId] = team; save();
+    return send(res, 200, { ok: true });
+  }
+
+  // ثبت قهرمان واقعی توسط مدیر (team خالی = پاک‌کردن)
+  if(url === "/api/admin/champion" && method === "POST"){
+    const body = await readBody(req);
+    const meId = authUid(req, body);
+    if(meId !== DB.admin) return send(res, 403, { error: "فقط مدیر" });
+    const team = String(body.team||"");
+    if(team && WC.CHAMP_TEAMS.indexOf(team) < 0) return send(res, 400, { error: "تیم نامعتبر" });
+    DB.champion = team || null; save();
+    return send(res, 200, { ok: true, champion: DB.champion });
   }
 
   return send(res, 404, { error: "مسیر نامعتبر" });

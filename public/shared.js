@@ -351,7 +351,7 @@
     },
     irn: {
       n: "ایران",
-      f: "19193-iran-imperial-war-flag",
+      f: "<svg xmlns='http://www.w3.org/2000/svg' width='34' height='22' viewBox='0 0 66 42' style='vertical-align:middle;border-radius:3px;overflow:hidden'><rect width='66' height='14' fill='#239f40'/><rect y='14' width='66' height='14' fill='#fff'/><rect y='28' width='66' height='14' fill='#da0000'/><g transform='translate(33,21)'><g stroke='#d99500' stroke-width='1.3' stroke-linecap='round'><line x1='0' y1='-6' x2='0' y2='-9.2'/><line x1='4.2' y1='-4.2' x2='6.5' y2='-6.5'/><line x1='6' y1='0' x2='9.2' y2='0'/><line x1='4.2' y1='4.2' x2='6.5' y2='6.5'/><line x1='0' y1='6' x2='0' y2='9.2'/><line x1='-4.2' y1='4.2' x2='-6.5' y2='6.5'/><line x1='-6' y1='0' x2='-9.2' y2='0'/><line x1='-4.2' y1='-4.2' x2='-6.5' y2='-6.5'/></g><circle r='6' fill='#f3b400'/><g fill='#7a5512'><ellipse cx='0.6' cy='1.6' rx='3.5' ry='2.1'/><circle cx='-2.9' cy='-0.2' r='2'/><path d='M2.2 -0.6 L5.2 -4.2 L4.1 -0.2 Z'/><rect x='-2.3' y='3.1' width='1' height='2.3'/><rect x='1.5' y='3.1' width='1' height='2.3'/><path d='M3.5 0.9 q3.2 -1 2.5 -4.2' stroke='#7a5512' stroke-width='0.9' fill='none'/></g></g></svg>",
       p: [
         "Mehdi Taremi",
         "Sardar Azmoun",

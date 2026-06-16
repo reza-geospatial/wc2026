@@ -144,3 +144,21 @@ body{margin:0}
 .modal input:focus{border-color:var(--accent)}
 .reccode{font-family:'Anton',sans-serif;font-size:23px;letter-spacing:2px;color:var(--gold);background:var(--bg2);border:1px dashed var(--line);border-radius:12px;padding:16px;margin-bottom:16px;word-break:break-all;direction:ltr}
 .linkbtn{background:none;border:0;color:var(--blue);font-family:inherit;font-size:12.5px;cursor:pointer;margin-top:10px;text-decoration:underline}
+
+/* champion prediction */
+.champgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:16px}
+.champ-team{position:relative;display:flex;align-items:center;gap:10px;background:var(--bg2);border:1px solid var(--line);
+  color:var(--txt);border-radius:14px;padding:13px 14px;cursor:pointer;font-family:inherit;font-weight:700;font-size:14px;transition:.15s;text-align:right}
+.champ-team:hover:not(:disabled){border-color:var(--accent);transform:translateY(-2px)}
+.champ-team:disabled{cursor:default;opacity:.85}
+.champ-team .flag{font-size:24px}
+.champ-team.sel{border-color:var(--accent);background:rgba(25,230,160,.12);box-shadow:0 0 0 1px var(--accent) inset}
+.champ-team.ischamp{border-color:var(--gold);background:rgba(255,206,77,.12);box-shadow:0 0 0 1px var(--gold) inset}
+.pick-badge{position:absolute;top:-9px;left:10px;background:var(--accent);color:#04220f;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px}
+.pick-badge.gold{background:var(--gold);color:#3a2400}
+.champ-banner{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:18px;padding:20px;margin-top:18px;text-align:center}
+.champ-banner.win{border-color:var(--gold);box-shadow:0 0 40px rgba(255,206,77,.18)}
+.champ-name{font-size:26px;font-weight:800;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:10px}
+.champ-name .flag{font-size:30px}
+.champ-msg{margin-top:12px;font-size:13.5px;color:var(--muted)}
+.champ-msg.win{color:var(--gold);font-weight:700}

@@ -27,7 +27,8 @@
     const d = await r.json();
     SERVER_OFFSET = (Number(d.now)||Date.now()) - Date.now();
     S = { users:d.users||[], admin:d.admin||null, cfg:d.cfg||WC.DEFAULT_CFG, results:d.results||{},
-          leaderboard:d.leaderboard||[], me:d.me||null, myPreds:d.myPreds||{} };
+          leaderboard:d.leaderboard||[], me:d.me||null, myPreds:d.myPreds||{},
+          champion:d.champion||null, myChamp:d.myChamp||null };
     ME = S.me ? S.me.id : null;
     return S;
   }
@@ -144,6 +145,7 @@
         </header>
         <nav class="tabs">
           ${tabBtn("predict","🎯 پیش‌بینی")}
+          ${tabBtn("champion","🏆 قهرمان")}
           ${tabBtn("board","📊 جدول امتیازات")}
           ${tabBtn("history","🕘 تاریخچهٔ من")}
           ${tabBtn("rules","⭐ قوانین")}
@@ -159,6 +161,7 @@
   function renderView(){
     const v = document.getElementById("view");
     if(TAB==="predict") v.innerHTML = viewPredict();
+    else if(TAB==="champion") v.innerHTML = viewChampion();
     else if(TAB==="board") v.innerHTML = viewBoard();
     else if(TAB==="history") v.innerHTML = viewHistory();
     else if(TAB==="rules") v.innerHTML = viewRules();
@@ -302,6 +305,53 @@
     </div>`;
   }
 
+  // ---------- champion ----------
+  function viewChampion(){
+    const locked = WC.championLocked(nowMs());
+    const decided = !!S.champion;
+    const mine = S.myChamp;
+    let html = `<div class="section">`;
+
+    if(decided){
+      const ch = WC.TEAMS[S.champion];
+      const hit = mine && mine===S.champion;
+      html += `<div class="champ-banner ${hit?"win":""}">
+        <div style="font-size:13px;color:var(--muted)">قهرمان جام جهانی ۲۰۲۶</div>
+        <div class="champ-name"><span class="flag">${ch.f}</span> ${esc(ch.n)}</div>
+        ${mine ? (hit
+          ? `<div class="champ-msg win">🎉 آفرین! درست زدی و ${S.cfg.pChampion} امتیاز گرفتی.</div>`
+          : `<div class="champ-msg">پیش‌بینی تو: ${WC.TEAMS[mine]?WC.TEAMS[mine].f+" "+esc(WC.TEAMS[mine].n):"—"} — این بار نشد.</div>`)
+          : `<div class="champ-msg">تو قهرمان را پیش‌بینی نکرده بودی.</div>`}
+      </div>`;
+    } else {
+      html += `<div class="note" style="margin-top:18px">
+        قهرمانِ کل جام جهانی را پیش‌بینی کن! اگر درست بزنی <b>${S.cfg.pChampion} امتیاز</b> می‌گیری.
+        ${locked ? "⛔ مهلت پیش‌بینی قهرمان (۲۵ ژوئن) تمام شده است." : "تا پایان ۲۵ ژوئن می‌توانی انتخابت را ثبت یا عوض کنی."}
+      </div>`;
+    }
+
+    html += `<div class="champgrid">`;
+    WC.CHAMP_TEAMS.forEach(tid=>{
+      const t = WC.TEAMS[tid];
+      const sel = mine===tid;
+      const isChamp = decided && S.champion===tid;
+      const dis = locked || decided;
+      html += `<button class="champ-team ${sel?"sel":""} ${isChamp?"ischamp":""}" ${dis?"disabled":""} data-act="pick-champ" data-team="${tid}">
+        <span class="flag">${t.f}</span>
+        <span class="cname">${esc(t.n)}</span>
+        ${sel?`<span class="pick-badge">${decided? (isChamp?"✓":"انتخاب تو") : "انتخاب تو"}</span>`:""}
+        ${isChamp&&!sel?`<span class="pick-badge gold">قهرمان</span>`:""}
+      </button>`;
+    });
+    html += `</div>`;
+
+    if(!locked && !decided){
+      html += `<div style="text-align:center;color:var(--muted);font-size:12.5px;margin-top:14px">
+        ${mine ? "می‌توانی تا پایان ۲۵ ژوئن انتخابت را تغییر دهی." : "روی یک تیم بزن تا ثبت شود."}</div>`;
+    }
+    return html + `</div>`;
+  }
+
   // ---------- board ----------
   function viewBoard(){
     const rows = S.leaderboard || [];
@@ -313,7 +363,7 @@
       html+=`<div class="lbrow ${r.id===ME?"me":""}">
         <div class="rank ${g}">${i+1}</div>
         <div><div class="lbname">${esc(r.name)}${r.id===ME?" (تو)":""}</div>
-          <div class="lbsub">${r.predCount} پیش‌بینی · ${r.exact} نتیجهٔ دقیق · ${r.outcome} برد/باخت درست · ${r.scorers} گلزن درست</div></div>
+          <div class="lbsub">${r.predCount} پیش‌بینی · ${r.exact} نتیجهٔ دقیق · ${r.outcome} برد/باخت درست · ${r.scorers} گلزن درست${r.champHit?" · 🏆 قهرمان درست":""}</div></div>
         <div class="lbpts"><b>${r.total}</b><small>امتیاز</small></div>
       </div>`;
     });
@@ -377,6 +427,8 @@
         <p>اگر تعداد گل هر دو تیم را دقیق بزنی. این جایزه به‌علاوهٔ امتیاز برد/باخت می‌نشیند.</p></div><div class="pt">+${c.pExact}</div></div>
       <div class="rule"><div class="ic">👥</div><div><b>هر گلزن درست (حداکثر ۲ نفر)</b>
         <p>برای هر بازیکنی که پیش‌بینی کنی گل می‌زند و واقعاً بزند.</p></div><div class="pt">+${c.pScorer}</div></div>
+      <div class="rule"><div class="ic">🏆</div><div><b>قهرمان جام را درست بزنی</b>
+        <p>اگر تیمی که برندهٔ کل جام می‌شود را در تب «قهرمان» درست پیش‌بینی کنی (فقط تا قبل از شروع جام).</p></div><div class="pt">+${c.pChampion}</div></div>
       <div class="note">مثال: نتیجهٔ واقعی برزیل ۲ - ۱ و گلزن وینیسیوس. پیش‌بینی «۲-۱» با گلزن وینیسیوس →
         برد/باخت (${c.pOutcome}) + دقیق (${c.pExact}) + گلزن (${c.pScorer}) = ${c.pOutcome+c.pExact+c.pScorer} امتیاز.</div>
     </div></div>`;
@@ -387,6 +439,7 @@
     const av=ADMIN_VIEW;
     let html=`<div class="section"><div class="filters" style="margin-top:18px">
       <button class="fchip ${av==="results"?"on":""}" data-av="results">ثبت نتایج</button>
+      <button class="fchip ${av==="champion"?"on":""}" data-av="champion">قهرمان جام</button>
       <button class="fchip ${av==="scoring"?"on":""}" data-av="scoring">تنظیم امتیازها</button>
       <button class="fchip ${av==="people"?"on":""}" data-av="people">کاربران</button>
     </div>`;
@@ -395,6 +448,15 @@
         <div class="filters"><button class="fchip ${FILTER.group==="all"?"on":""}" data-fg="all">همه</button>
         ${Object.keys(WC.GROUPS).map(g=>`<button class="fchip ${FILTER.group===g?"on":""}" data-fg="${g}">گروه ${g}</button>`).join("")}</div>`;
       WC.MATCHES.filter(m=>FILTER.group==="all"||m.group===FILTER.group).forEach(m=>html+=resultCard(m));
+    } else if(av==="champion"){
+      const cur=S.champion;
+      html+=`<div class="panel"><h3>ثبت قهرمان جام</h3>
+        <p class="sub">در پایان جام، تیم قهرمان را اینجا انتخاب کن تا امتیاز پیش‌بینی‌کنندگانِ درست خودکار اضافه شود.</p>
+        <div class="champgrid">
+          ${WC.CHAMP_TEAMS.map(tid=>{const t=WC.TEAMS[tid];return `<button class="champ-team ${cur===tid?"sel":""}" data-act="set-champ" data-team="${tid}"><span class="flag">${t.f}</span><span class="cname">${esc(t.n)}</span>${cur===tid?`<span class="pick-badge">قهرمان فعلی</span>`:""}</button>`;}).join("")}
+        </div>
+        ${cur?`<div class="cardfoot" style="margin-top:14px"><button class="btn ghost" data-act="clear-champ">✕ پاک‌کردن قهرمان</button></div>`:""}
+      </div>`;
     } else if(av==="scoring"){
       const c=S.cfg;
       html+=`<div class="panel"><h3>تنظیم وزن امتیازها</h3>
@@ -404,6 +466,7 @@
           <div><label>تعداد گل یک تیم درست</label><input id="c-pOneTeam" type="number" value="${c.pOneTeam}"/></div>
           <div><label>نتیجهٔ کاملاً دقیق</label><input id="c-pExact" type="number" value="${c.pExact}"/></div>
           <div><label>هر گلزن درست</label><input id="c-pScorer" type="number" value="${c.pScorer}"/></div>
+          <div><label>قهرمان جام درست</label><input id="c-pChampion" type="number" value="${c.pChampion}"/></div>
         </div>
         <div class="cardfoot"><button class="btn primary" data-act="save-cfg">💾 ذخیرهٔ تنظیمات</button></div></div>`;
     } else {
@@ -482,9 +545,23 @@
 
     const sc=v.querySelector('[data-act="save-cfg"]'); if(sc) sc.onclick=async()=>{
       const cfg={ pOutcome:+document.getElementById("c-pOutcome").value, pOneTeam:+document.getElementById("c-pOneTeam").value,
-        pExact:+document.getElementById("c-pExact").value, pScorer:+document.getElementById("c-pScorer").value };
-      try{ await post("/api/config",{ userId:ME, cfg }); await getState(); toast("تنظیمات ذخیره شد"); renderView(); }catch(e){ toast(e.message,true); }
+        pExact:+document.getElementById("c-pExact").value, pScorer:+document.getElementById("c-pScorer").value,
+        pChampion:+document.getElementById("c-pChampion").value };
+      try{ await post("/api/config",{ cfg }); await getState(); toast("تنظیمات ذخیره شد"); renderView(); }catch(e){ toast(e.message,true); }
     };
+
+    v.querySelectorAll('[data-act="set-champ"]').forEach(b=>b.onclick=async()=>{
+      try{ await post("/api/admin/champion",{ team:b.dataset.team }); await getState(); toast("قهرمان جام ثبت شد"); renderView(); }
+      catch(e){ toast(e.message,true); }
+    });
+    const cc=v.querySelector('[data-act="clear-champ"]'); if(cc) cc.onclick=async()=>{
+      try{ await post("/api/admin/champion",{ team:"" }); await getState(); toast("قهرمان پاک شد"); renderView(); }catch(e){ toast(e.message,true); }
+    };
+
+    v.querySelectorAll('[data-act="pick-champ"]').forEach(b=>b.onclick=async()=>{
+      try{ await post("/api/champion",{ team:b.dataset.team }); await getState(); toast("قهرمانِ انتخابی‌ات ثبت شد"); renderView(); }
+      catch(e){ toast(e.message,true); }
+    });
 
     v.querySelectorAll('[data-act="make-admin"]').forEach(b=>b.onclick=async()=>{
       try{ await post("/api/admin/transfer",{ target:b.dataset.uid }); await getState(); toast("مدیر تغییر کرد"); render(); }catch(e){ toast(e.message,true); }

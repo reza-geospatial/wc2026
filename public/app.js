@@ -363,7 +363,7 @@
       html+=`<div class="lbrow ${r.id===ME?"me":""}">
         <div class="rank ${g}">${i+1}</div>
         <div><div class="lbname">${esc(r.name)}${r.id===ME?" (تو)":""}</div>
-          <div class="lbsub">${r.predCount} پیش‌بینی · ${r.exact} نتیجهٔ دقیق · ${r.outcome} برد/باخت درست · ${r.scorers} گلزن درست${r.champHit?" · 🏆 قهرمان درست":""}</div></div>
+          <div class="lbsub">${r.predCount} پیش‌بینی · ${r.exact} نتیجهٔ دقیق · ${r.team} گل یک تیم درست · ${r.outcome} برد/باخت درست · ${r.scorers} گلزن درست${r.champHit?" · 🏆 قهرمان درست":""}</div></div>
         <div class="lbpts"><b>${r.total}</b><small>امتیاز</small></div>
       </div>`;
     });

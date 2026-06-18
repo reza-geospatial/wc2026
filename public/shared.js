@@ -793,6 +793,7 @@
       var p = preds[u.id] || {};
       var total = 0,
         exact = 0,
+        team = 0,
         outcome = 0,
         scorers = 0,
         played = 0;
@@ -804,6 +805,7 @@
           if (dd) {
             total += dd.total;
             if (dd.exact) exact++;
+            if (dd.team) team++;
             if (dd.outcome) outcome++;
             if (dd.scorer) scorers += dd.scorer / (cfg.pScorer || 1);
             played++;
@@ -821,6 +823,7 @@
         name: u.name,
         total: total,
         exact: exact,
+        team: team,
         outcome: outcome,
         scorers: scorers,
         played: played,

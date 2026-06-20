@@ -750,6 +750,20 @@
       .toLowerCase()
       .replace(/\s+/g, " ");
   }
+  // کلیدِ تطبیق نام گلزن: بی‌اعتنا به علامت‌های حروف، بزرگی/کوچکی، نقطه/خط‌فاصله/فاصله
+  // مثال: «Vinícius Júnior» = «Vinicius Junior» = «vinicius  junior»
+  function scKey(s) {
+    return (s == null ? "" : String(s))
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // حذف علامت‌های ترکیبی (é→e, í→i, ç→c, ğ→g, …)
+      .toLowerCase()
+      .replace(/ø/g, "o").replace(/ł/g, "l").replace(/đ/g, "d").replace(/ð/g, "d")
+      .replace(/ı/g, "i").replace(/ß/g, "ss").replace(/æ/g, "ae").replace(/œ/g, "oe")
+      .replace(/[’'`´.\-_]/g, " ") // علامت‌های جداکننده → فاصله
+      .replace(/[^a-z0-9 ]/g, " ") // هر چیز دیگر → فاصله
+      .replace(/\s+/g, " ")
+      .trim();
+  }
   function sign(n) {
     return n > 0 ? 1 : n < 0 ? -1 : 0;
   }
@@ -770,8 +784,8 @@
       aR = Number(pred.a) === Number(res.a);
     if (hR && aR) d.exact = cfg.pExact;
     else if (hR || aR) d.team = cfg.pOneTeam;
-    var actual = (res.s || []).map(norm);
-    var predNames = (pred.s || []).filter(Boolean).map(norm);
+    var actual = (res.s || []).map(scKey);
+    var predNames = (pred.s || []).filter(Boolean).map(scKey);
     var uniq = predNames.filter(function (n, i) {
       return predNames.indexOf(n) === i;
     }); // حذف نام تکراری

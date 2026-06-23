@@ -258,12 +258,61 @@
     return html+`</div>`;
   }
 
+  // ===== اتوکامپلیتِ گلزن (جایگزینِ datalist که روی موبایل فقط ۳ پیشنهاد نشان می‌داد) =====
+  const ACLISTS = {};
+  function acNorm(s){
+    return (s||"").toString().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+      .replace(/[øØ]/g,"o").replace(/[łŁ]/g,"l").replace(/[đĐðÐ]/g,"d")
+      .replace(/[ıİ]/g,"i").replace(/ß/g,"ss").replace(/[æÆ]/g,"ae").replace(/[œŒ]/g,"oe")
+      .toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+  }
+  function acInput(e){ return e.target.closest && e.target.closest("input[data-ac]"); }
+  function acItemOf(e){ return e.target.closest && e.target.closest(".ac-item"); }
+  function acToken(inp){
+    if(inp.dataset.acMulti){ const p=inp.value.split(/[,،]/); return p[p.length-1].trim(); }
+    return inp.value.trim();
+  }
+  function acShow(inp){
+    const box=document.getElementById("acl-"+inp.id); if(!box) return;
+    const list=ACLISTS[inp.dataset.ac]||[];
+    const q=acNorm(acToken(inp));
+    const opts = q ? list.filter(n=>acNorm(n).indexOf(q)>=0) : list.slice();
+    if(!opts.length){ box.style.display="none"; box.innerHTML=""; return; }
+    box.innerHTML = opts.map(n=>`<div class="ac-item" data-name="${esc(n)}">${esc(n)}</div>`).join("");
+    box.scrollTop=0; box.style.display="block";
+  }
+  function acHide(inp){ const box=document.getElementById("acl-"+inp.id); if(box) box.style.display="none"; }
+  function acChoose(it){
+    const box=it.closest(".ac-list"); const inp=box && box.previousElementSibling;
+    if(!inp||!inp.matches("input[data-ac]")) return;
+    const name=it.dataset.name;
+    if(inp.dataset.acMulti){
+      const parts=inp.value.split(/[,،]/).map(x=>x.trim());
+      parts[parts.length-1]=name;
+      inp.value=parts.filter(Boolean).join("، ")+"، "; // جداکننده برای گلزن بعدی (تکرار برای هت‌تریک مجاز است)
+      inp.focus(); acShow(inp);
+    } else { inp.value=name; acHide(inp); }
+  }
+  let acBound=false, acTouchY=null, acMoved=false;
+  function bindAutocompleteOnce(){
+    if(acBound) return; acBound=true;
+    document.addEventListener("focusin", e=>{ const i=acInput(e); if(i) acShow(i); });
+    document.addEventListener("input",   e=>{ const i=acInput(e); if(i) acShow(i); });
+    document.addEventListener("focusout",e=>{ const i=acInput(e); if(i){ const inp=i; setTimeout(()=>acHide(inp),200); } });
+    // دسکتاپ: کلیک
+    document.addEventListener("mousedown", e=>{ const it=acItemOf(e); if(it){ e.preventDefault(); acChoose(it); } });
+    // موبایل: تشخیص «تپ» از «اسکرول» تا هم انتخاب کار کند هم لیست اسکرول شود
+    document.addEventListener("touchstart", e=>{ const it=acItemOf(e); if(it){ acTouchY=e.touches[0].clientY; acMoved=false; } }, {passive:true});
+    document.addEventListener("touchmove",  e=>{ if(acTouchY!=null && Math.abs(e.touches[0].clientY-acTouchY)>10) acMoved=true; }, {passive:true});
+    document.addEventListener("touchend",   e=>{ const it=acItemOf(e); if(it && !acMoved){ e.preventDefault(); acChoose(it); } acTouchY=null; });
+  }
+
   function matchCard(m){
     const T=WC.TEAMS, hm=T[m.home], am=T[m.away];
     const mp=myPreds(), pred=mp[m.id], res=S.results[m.id];
     const lk=locked(m);
     const players=[...(hm.p||[]),...(am.p||[])];
-    const dl="dl-"+m.id;
+    ACLISTS[m.id]=players;
     const bd = (res && res.h!=null) ? WC.scoreOne(pred,res,S.cfg) : null;
     return `<div class="card" data-mid="${m.id}">
       <div class="meta">
@@ -282,10 +331,15 @@
       </div>
       <div class="scorers">
         <div class="lbl">🎯 گلزن‌ها (حداکثر ۲ نفر — اختیاری)</div>
-        <datalist id="${dl}">${players.map(p=>`<option value="${esc(p)}"></option>`).join("")}</datalist>
         <div class="scorer-ins">
-          <input class="txt-in" id="s1-${m.id}" list="${dl}" value="${pred&&pred.s?esc(pred.s[0]||""):""}" ${lk?"disabled":""} placeholder="گلزن اول…"/>
-          <input class="txt-in" id="s2-${m.id}" list="${dl}" value="${pred&&pred.s?esc(pred.s[1]||""):""}" ${lk?"disabled":""} placeholder="گلزن دوم…"/>
+          <div class="ac-wrap">
+            <input class="txt-in" id="s1-${m.id}" data-ac="${m.id}" autocomplete="off" value="${pred&&pred.s?esc(pred.s[0]||""):""}" ${lk?"disabled":""} placeholder="گلزن اول…"/>
+            <div class="ac-list" id="acl-s1-${m.id}"></div>
+          </div>
+          <div class="ac-wrap">
+            <input class="txt-in" id="s2-${m.id}" data-ac="${m.id}" autocomplete="off" value="${pred&&pred.s?esc(pred.s[1]||""):""}" ${lk?"disabled":""} placeholder="گلزن دوم…"/>
+            <div class="ac-list" id="acl-s2-${m.id}"></div>
+          </div>
         </div>
       </div>
       ${lk?"":`<div class="cardfoot">
@@ -485,7 +539,7 @@
   }
   function resultCard(m){
     const T=WC.TEAMS, hm=T[m.home], am=T[m.away], res=S.results[m.id];
-    const players=[...(hm.p||[]),...(am.p||[])], dl="rdl-"+m.id;
+    const players=[...(hm.p||[]),...(am.p||[])]; ACLISTS[m.id]=players;
     return `<div class="card" data-mid="${m.id}">
       <div class="meta"><span class="gbadge">گروه ${m.group}</span><span>${fmtDate(m.dt)}</span>
         ${(res&&res.h!=null)?`<span class="savedbadge">✓ ثبت‌شده</span>`:""}</div>
@@ -499,8 +553,10 @@
         <div class="team away"><span class="flag">${am.f}</span><span class="tname">${esc(am.n)}</span></div>
       </div>
       <div class="scorers"><div class="lbl">🎯 گلزن‌های واقعی (با کاما جدا کن — برای هت‌تریک نام را تکرار کن)</div>
-        <datalist id="${dl}">${players.map(p=>`<option value="${esc(p)}"></option>`).join("")}</datalist>
-        <input class="txt-in" id="rs-${m.id}" list="${dl}" value="${res&&res.s?esc(res.s.join("، ")):""}" placeholder="مثلاً: Vinícius Júnior، Raphinha"/>
+        <div class="ac-wrap">
+          <input class="txt-in" id="rs-${m.id}" data-ac="${m.id}" data-ac-multi="1" autocomplete="off" value="${res&&res.s?esc(res.s.join("، ")):""}" placeholder="مثلاً: Vinícius Júnior، Raphinha"/>
+          <div class="ac-list" id="acl-rs-${m.id}"></div>
+        </div>
       </div>
       <div class="cardfoot"><button class="btn primary" data-act="save-result" data-mid="${m.id}">💾 ثبت نتیجه</button></div>
     </div>`;
@@ -517,6 +573,7 @@
 
   function bindView(){
     const v=document.getElementById("view");
+    bindAutocompleteOnce();
     v.querySelectorAll("[data-fo]").forEach(b=>b.onclick=()=>{ FILTER.only=b.dataset.fo; renderView(); });
     v.querySelectorAll("[data-fg]").forEach(b=>b.onclick=()=>{ FILTER.group=b.dataset.fg; renderView(); });
     v.querySelectorAll("[data-av]").forEach(b=>b.onclick=()=>{ ADMIN_VIEW=b.dataset.av; renderView(); });

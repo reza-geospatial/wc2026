@@ -471,12 +471,18 @@
     else if (hR || aR) d.team = cfg.pOneTeam;
     var actual = (res.s || []).map(scKey);
     var predNames = (pred.s || []).filter(Boolean).map(scKey);
-    var uniq = predNames.filter(function (n, i) {
-      return predNames.indexOf(n) === i;
-    }); // حذف نام تکراری
+    // شمارش با احتساب تکرار: هر گلِ واقعی فقط یک‌بار «مصرف» می‌شود.
+    // پس پیش‌بینیِ دو گل برای یک بازیکن (مثلاً مسی در هر دو فیلد) تنها زمانی
+    // ۲ بار امتیاز می‌گیرد که آن بازیکن واقعاً ۲ گل زده باشد؛ در غیر این صورت
+    // یک‌بار. این کار هم دابل (برِیس) را درست امتیاز می‌دهد و هم قابل سوءاستفاده نیست.
+    var pool = actual.slice();
     var hits = 0;
-    uniq.forEach(function (n) {
-      if (actual.indexOf(n) >= 0) hits++;
+    predNames.forEach(function (n) {
+      var idx = pool.indexOf(n);
+      if (idx >= 0) {
+        hits++;
+        pool.splice(idx, 1);
+      }
     });
     d.scorer = hits * cfg.pScorer;
     d.total = d.outcome + d.team + d.exact + d.scorer;

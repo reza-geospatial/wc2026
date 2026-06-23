@@ -30,7 +30,9 @@ function testScoring(){
 
   // جزئیات تفکیکی
   const d = WC.scoreOne({h:2,a:1,s:["Messi","Messi"]},{h:2,a:1,s:["Messi"]},CFG);
-  eq(d, {outcome:3,team:0,exact:5,scorer:2,total:10}, "نام گلزن تکراری دوبار حساب نمی‌شود (۲ نه ۴)");
+  eq(d, {outcome:3,team:0,exact:5,scorer:2,total:10}, "پیش‌بینی دو گل ولی فقط یک گل زده = فقط ۲ امتیاز");
+  const dd = WC.scoreOne({h:2,a:0,s:["Messi","Messi"]},{h:2,a:0,s:["Messi","Messi"]},CFG);
+  eq(dd, {outcome:3,team:0,exact:5,scorer:4,total:12}, "دابلِ درست (دو گلِ مسی) = ۴ امتیازِ گلزن");
 
   eq(WC.scoreOne(null,{h:1,a:0},CFG), null, "بدون پیش‌بینی = null");
   eq(WC.scoreOne({h:1,a:0},null,CFG), null, "بدون نتیجه = null");

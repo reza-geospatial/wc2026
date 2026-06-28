@@ -145,6 +145,7 @@
         </header>
         <nav class="tabs">
           ${tabBtn("predict","🎯 پیش‌بینی")}
+          ${tabBtn("r16","⚔️ یک‌هشتم")}
           ${tabBtn("champion","🏆 قهرمان")}
           ${tabBtn("board","📊 جدول امتیازات")}
           ${tabBtn("history","🕘 تاریخچهٔ من")}
@@ -161,6 +162,7 @@
   function renderView(){
     const v = document.getElementById("view");
     if(TAB==="predict") v.innerHTML = viewPredict();
+    else if(TAB==="r16") v.innerHTML = viewR16();
     else if(TAB==="champion") v.innerHTML = viewChampion();
     else if(TAB==="board") v.innerHTML = viewBoard();
     else if(TAB==="history") v.innerHTML = viewHistory();
@@ -359,6 +361,80 @@
     </div>`;
   }
 
+  // ---------- round of 16 ----------
+  function viewR16(){
+    const mp = myPreds();
+    const list = WC.R16_MATCHES;
+    const days = {};
+    list.forEach(m=>{ const k=dayKey(m.dt); (days[k]=days[k]||[]).push(m); });
+    let html = `<div class="section">
+      <div class="note" style="margin-bottom:0">
+        ⚔️ مرحلهٔ یک‌هشتم نهایی — پیش‌بینی نتیجه و گلزن‌ها را قبل از سوت شروع هر بازی ثبت کن.
+      </div>`;
+    const keys = Object.keys(days);
+    if(!keys.length) html+=`<div class="empty">بازی‌ای برای نمایش پیدا نشد.</div>`;
+    keys.forEach(d=>{
+      html+=`<div class="daygroup"><div class="dayhdr">📅 ${d}<span class="ln"></span></div>`;
+      days[d].forEach(m=> html+=r16MatchCard(m));
+      html+=`</div>`;
+    });
+    return html+`</div>`;
+  }
+
+  function r16MatchCard(m){
+    const T = WC.TEAMS;
+    const hm = T[m.home] || WC.r16Team(m.home);
+    const am = T[m.away] || WC.r16Team(m.away);
+    const mp = myPreds(), pred = mp[m.id], res = S.results[m.id];
+    const lk = locked(m);
+    const players = [...(hm.p||[]),...(am.p||[])];
+    ACLISTS[m.id] = players;
+    const bd = (res && res.h!=null) ? WC.scoreOne(pred,res,S.cfg) : null;
+    return `<div class="card" data-mid="${m.id}">
+      <div class="meta">
+        <span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌هشتم</span>
+        <span>${fmtDate(m.dt)}</span><span>· ${esc(m.venue)}</span>
+        ${lk?`<span class="lockbadge">🔒 قفل شد</span>`:(pred?`<span class="savedbadge">✓ ثبت‌شده</span>`:"")}
+      </div>
+      <div class="matchrow">
+        <div class="team"><span class="flag">${hm.f}</span><span class="tname">${esc(hm.n)}</span></div>
+        <div class="vs">
+          <input class="score-in" id="h-${m.id}" type="number" min="0" max="20" value="${pred?pred.h:""}" ${lk?"disabled":""} placeholder="−"/>
+          <span class="dash">:</span>
+          <input class="score-in" id="a-${m.id}" type="number" min="0" max="20" value="${pred?pred.a:""}" ${lk?"disabled":""} placeholder="−"/>
+        </div>
+        <div class="team away"><span class="flag">${am.f}</span><span class="tname">${esc(am.n)}</span></div>
+      </div>
+      <div class="scorers">
+        <div class="lbl">🎯 گلزن‌ها (حداکثر ۲ نفر — اختیاری)</div>
+        <div class="scorer-ins">
+          <div class="ac-wrap">
+            <input class="txt-in" id="s1-${m.id}" data-ac="${m.id}" autocomplete="off" value="${pred&&pred.s?esc(pred.s[0]||""):""}" ${lk?"disabled":""} placeholder="گلزن اول…"/>
+            <div class="ac-list" id="acl-s1-${m.id}"></div>
+          </div>
+          <div class="ac-wrap">
+            <input class="txt-in" id="s2-${m.id}" data-ac="${m.id}" autocomplete="off" value="${pred&&pred.s?esc(pred.s[1]||""):""}" ${lk?"disabled":""} placeholder="گلزن دوم…"/>
+            <div class="ac-list" id="acl-s2-${m.id}"></div>
+          </div>
+        </div>
+      </div>
+      ${lk?"":`<div class="cardfoot">
+        <button class="btn primary" data-act="save-pred" data-mid="${m.id}">💾 ثبت پیش‌بینی</button>
+        ${pred?`<span style="font-size:12px;color:var(--muted)">پیش‌بینی فعلی: ${pred.h} - ${pred.a}</span>`:""}
+      </div>`}
+      ${(res&&res.h!=null)?`<div class="result-strip">
+        <div class="rsline"><b style="color:#fff">نتیجهٔ واقعی: ${res.h} - ${res.a}</b>${(res.s&&res.s.length)?`<span>· گلزن‌ها: ${esc(res.s.join("، "))}</span>`:""}</div>
+        ${(pred&&bd)?`<div class="bd">
+          <span class="${bd.outcome?"pos":""}">برد/باخت: ${bd.outcome}</span>
+          <span class="${bd.team?"pos":""}">یک تیم: ${bd.team}</span>
+          <span class="${bd.exact?"pos":""}">نتیجهٔ دقیق: ${bd.exact}</span>
+          <span class="${bd.scorer?"pos":""}">گلزن: ${bd.scorer}</span>
+          <span class="pos" style="font-weight:800">مجموع: ${bd.total} امتیاز</span>
+        </div>`:(!pred?`<div class="bd"><span>پیش‌بینی نکرده بودی</span></div>`:"")}
+      </div>`:""}
+    </div>`;
+  }
+
   // ---------- champion ----------
   function viewChampion(){
     const locked = WC.championLocked(nowMs());
@@ -429,7 +505,8 @@
   // ---------- history ----------
   function viewHistory(){
     const mp=myPreds();
-    const done=WC.MATCHES.filter(m=>S.results[m.id]&&S.results[m.id].h!=null&&mp[m.id]);
+    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES);
+    const done=allMatches.filter(m=>S.results[m.id]&&S.results[m.id].h!=null&&mp[m.id]);
     const total=done.reduce((s,m)=>s+(WC.scoreOne(mp[m.id],S.results[m.id],S.cfg)?.total||0),0);
     let html=`<div class="section">
       <div class="panel" style="display:flex;align-items:center;gap:14px">
@@ -443,17 +520,23 @@
     const T=WC.TEAMS;
     done.forEach(m=>{
       const p=mp[m.id], r=S.results[m.id], d=WC.scoreOne(p,r,S.cfg);
+      const isR16 = m.stage==="R16";
+      const hmTeam = T[m.home] || WC.r16Team(m.home);
+      const amTeam = T[m.away] || WC.r16Team(m.away);
+      const stageBadge = isR16
+        ? `<span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌هشتم</span>`
+        : `<span class="gbadge">گروه ${m.group}</span>`;
       html+=`<div class="card">
-        <div class="meta"><span class="gbadge">گروه ${m.group}</span><span>${fmtDate(m.dt)}</span>
+        <div class="meta">${stageBadge}<span>${fmtDate(m.dt)}</span>
           <span class="ptspill">⭐ ${d.total} امتیاز</span></div>
         <div class="matchrow">
-          <div class="team"><span class="flag">${T[m.home].f}</span><span class="tname">${esc(T[m.home].n)}</span></div>
+          <div class="team"><span class="flag">${hmTeam.f}</span><span class="tname">${esc(hmTeam.n)}</span></div>
           <div class="vs"><div style="text-align:center">
             <div class="num" style="font-size:22px">${r.h} : ${r.a}</div>
             <div style="font-size:10px;color:var(--muted)">واقعی</div>
             <div style="font-size:12px;margin-top:4px;color:var(--blue)">تو: ${p.h} : ${p.a}</div>
           </div></div>
-          <div class="team away"><span class="flag">${T[m.away].f}</span><span class="tname">${esc(T[m.away].n)}</span></div>
+          <div class="team away"><span class="flag">${amTeam.f}</span><span class="tname">${esc(amTeam.n)}</span></div>
         </div>
         <div class="bd" style="margin-top:12px">
           <span class="${d.outcome?"pos":""}">برد/باخت: ${d.outcome}</span>
@@ -499,9 +582,15 @@
     </div>`;
     if(av==="results"){
       html+=`<div class="note" style="margin-top:0">نتیجهٔ واقعی هر مسابقه را وارد کن. به‌محض ذخیره، امتیاز همه خودکار حساب می‌شود.</div>
-        <div class="filters"><button class="fchip ${FILTER.group==="all"?"on":""}" data-fg="all">همه</button>
-        ${Object.keys(WC.GROUPS).map(g=>`<button class="fchip ${FILTER.group===g?"on":""}" data-fg="${g}">گروه ${g}</button>`).join("")}</div>`;
-      WC.MATCHES.filter(m=>FILTER.group==="all"||m.group===FILTER.group).forEach(m=>html+=resultCard(m));
+        <div class="filters"><button class="fchip ${FILTER.group==="all"?"on":""}" data-fg="all">همه (گروهی)</button>
+        ${Object.keys(WC.GROUPS).map(g=>`<button class="fchip ${FILTER.group===g?"on":""}" data-fg="${g}">گروه ${g}</button>`).join("")}
+        <button class="fchip ${FILTER.group==="r16"?"on":""}" data-fg="r16">⚔️ یک‌هشتم</button>
+        </div>`;
+      if(FILTER.group==="r16"){
+        WC.R16_MATCHES.forEach(m=>html+=resultCard(m));
+      } else {
+        WC.MATCHES.filter(m=>FILTER.group==="all"||m.group===FILTER.group).forEach(m=>html+=resultCard(m));
+      }
     } else if(av==="champion"){
       const cur=S.champion;
       html+=`<div class="panel"><h3>ثبت قهرمان جام</h3>
@@ -538,10 +627,16 @@
     return html+`</div>`;
   }
   function resultCard(m){
-    const T=WC.TEAMS, hm=T[m.home], am=T[m.away], res=S.results[m.id];
+    const T=WC.TEAMS;
+    const hm=T[m.home]||WC.r16Team(m.home), am=T[m.away]||WC.r16Team(m.away);
+    const res=S.results[m.id];
     const players=[...(hm.p||[]),...(am.p||[])]; ACLISTS[m.id]=players;
+    const isR16=m.stage==="R16";
+    const stageBadge = isR16
+      ? `<span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌هشتم</span>`
+      : `<span class="gbadge">گروه ${m.group}</span>`;
     return `<div class="card" data-mid="${m.id}">
-      <div class="meta"><span class="gbadge">گروه ${m.group}</span><span>${fmtDate(m.dt)}</span>
+      <div class="meta">${stageBadge}<span>${fmtDate(m.dt)}</span>
         ${(res&&res.h!=null)?`<span class="savedbadge">✓ ثبت‌شده</span>`:""}</div>
       <div class="matchrow">
         <div class="team"><span class="flag">${hm.f}</span><span class="tname">${esc(hm.n)}</span></div>

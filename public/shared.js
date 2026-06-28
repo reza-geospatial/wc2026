@@ -389,6 +389,85 @@
     MATCH_BY_ID[m.id] = m;
   });
 
+  /* ============================================================
+     بازی‌های مرحلهٔ یک‌هشتم نهایی (Round of 16)
+     تاریخ‌ها بر اساس UTC — مرورگر به ساعت محلی تبدیل می‌کند
+     ============================================================ */
+  // تیم‌هایی که هنوز مشخص نشده‌اند با رشتهٔ توصیفی مشخص می‌شوند
+  const R16_TEAMS = {
+    "rsa-can-w": { n: "برنده آفریقای جنوبی / کانادا", f: "🏆" },
+    "bra-jpn-w": { n: "برنده برزیل / ژاپن", f: "🏆" },
+    "ger-par-w": { n: "برنده آلمان / پاراگوئه", f: "🏆" },
+    "ned-mar-w": { n: "برنده هلند / مراکش", f: "🏆" },
+    "civ-nor-w": { n: "برنده ساحل عاج / نروژ", f: "🏆" },
+    "fra-swe-w": { n: "برنده فرانسه / سوئد", f: "🏆" },
+    "mex-ecu-w": { n: "برنده مکزیک / اکوادور", f: "🏆" },
+    "eng-cog-w": { n: "برنده انگلیس / کنگو", f: "🏆" },
+    "bel-sen-w": { n: "برنده بلژیک / سنگال", f: "🏆" },
+    "usa-bos-w": { n: "برنده آمریکا / بوسنی", f: "🏆" },
+    "esp-aut-w": { n: "برنده اسپانیا / اتریش", f: "🏆" },
+    "por-cro-w": { n: "برنده پرتغال / کرواسی", f: "🏆" },
+    "sui-alg-w": { n: "برنده سوئیس / الجزایر", f: "🏆" },
+    "aus-egy-w": { n: "برنده استرالیا / مصر", f: "🏆" },
+    "arg-cpv-w": { n: "برنده آرژانتین / کیپ‌ورد", f: "🏆" },
+    "col-gha-w": { n: "برنده کلمبیا / غنا", f: "🏆" },
+  };
+
+  // اطلاعات تیم‌ها را از TEAMS می‌گیریم؛ اگر تیم مشخص نشده بود، از R16_TEAMS استفاده می‌کنیم
+  function r16Team(code) {
+    return TEAMS[code] || R16_TEAMS[code] || { n: code, f: "🏟️" };
+  }
+
+  const R16_MATCHES = [
+    // Sunday, July 27 — آفریقای جنوبی / کانادا  22:30 ایران = 19:00 UTC
+    ["r16m1",  "rsa", "can", "2026-07-27T19:00:00Z", "استادیوم TBD"],
+    // Monday, July 28 — برزیل / ژاپن  20:30 ایران = 17:00 UTC
+    ["r16m2",  "bra", "jpn", "2026-07-28T17:00:00Z", "استادیوم TBD"],
+    // Tuesday, July 29 — آلمان / پاراگوئه  00:00 ایران = 20:30 UTC روز قبل
+    ["r16m3",  "ger", "par", "2026-07-28T20:30:00Z", "استادیوم TBD"],
+    // Tuesday, July 29 — هلند / مراکش  04:30 ایران = 01:00 UTC
+    ["r16m4",  "ned", "mar", "2026-07-29T01:00:00Z", "استادیوم TBD"],
+    // Tuesday, July 29 — ساحل عاج / نروژ  20:30 ایران = 17:00 UTC
+    ["r16m5",  "civ", "nor", "2026-07-29T17:00:00Z", "استادیوم TBD"],
+    // Wednesday, July 30 — فرانسه / سوئد  00:30 ایران = 21:00 UTC روز قبل
+    ["r16m6",  "fra", "swe", "2026-07-29T21:00:00Z", "استادیوم TBD"],
+    // Wednesday, July 30 — مکزیک / اکوادور  04:30 ایران = 01:00 UTC
+    ["r16m7",  "mex", "ecu", "2026-07-30T01:00:00Z", "استادیوم TBD"],
+    // Wednesday, July 30 — انگلیس / جمهوری کنگو  19:30 ایران = 16:00 UTC
+    ["r16m8",  "eng", "cod", "2026-07-30T16:00:00Z", "استادیوم TBD"],
+    // Wednesday, July 30 — بلژیک / سنگال  23:30 ایران = 20:00 UTC
+    ["r16m9",  "bel", "sen", "2026-07-30T20:00:00Z", "استادیوم TBD"],
+    // Thursday, July 31 — آمریکا / بوسنی  03:30 ایران = 00:00 UTC
+    ["r16m10", "usa", "bih", "2026-07-31T00:00:00Z", "استادیوم TBD"],
+    // Thursday, July 31 — اسپانیا / اتریش  22:30 ایران = 19:00 UTC
+    ["r16m11", "esp", "aut", "2026-07-31T19:00:00Z", "استادیوم TBD"],
+    // Friday, August 1 — پرتغال / کرواسی  02:30 ایران = 23:00 UTC روز قبل
+    ["r16m12", "por", "cro", "2026-07-31T23:00:00Z", "استادیوم TBD"],
+    // Friday, August 1 — سوئیس / الجزایر  06:30 ایران = 03:00 UTC
+    ["r16m13", "sui", "alg", "2026-08-01T03:00:00Z", "استادیوم TBD"],
+    // Friday, August 1 — استرالیا / مصر  21:30 ایران = 18:00 UTC
+    ["r16m14", "aus", "egy", "2026-08-01T18:00:00Z", "استادیوم TBD"],
+    // Saturday, August 2 — آرژانتین / کیپ‌ورد  01:30 ایران = 22:00 UTC روز قبل
+    ["r16m15", "arg", "cpv", "2026-08-01T22:00:00Z", "استادیوم TBD"],
+    // Saturday, August 2 — کلمبیا / غنا  05:00 ایران = 01:30 UTC
+    ["r16m16", "col", "gha", "2026-08-02T01:30:00Z", "استادیوم TBD"],
+  ].map(function (x) {
+    return {
+      id: x[0],
+      stage: "R16",
+      home: x[1],
+      away: x[2],
+      dt: x[3],
+      venue: x[4],
+    };
+  });
+
+  const R16_MATCH_BY_ID = {};
+  R16_MATCHES.forEach(function (m) {
+    R16_MATCH_BY_ID[m.id] = m;
+    MATCH_BY_ID[m.id] = m; // به MATCH_BY_ID هم اضافه می‌کنیم تا سرور بتواند نتایج را ثبت کند
+  });
+
   const DEFAULT_CFG = {
     pOutcome: 3,
     pOneTeam: 2,
@@ -494,6 +573,7 @@
     cfg = cfg || DEFAULT_CFG;
     champPreds = champPreds || {};
     champion = champion || null;
+    var allMatches = MATCHES.concat(R16_MATCHES);
     var rows = users.map(function (u) {
       var p = preds[u.id] || {};
       var total = 0,
@@ -502,7 +582,7 @@
         outcome = 0,
         scorers = 0,
         played = 0;
-      MATCHES.forEach(function (m) {
+      allMatches.forEach(function (m) {
         var r = results[m.id],
           pp = p[m.id];
         if (r && r.h != null && pp) {
@@ -549,6 +629,9 @@
     GROUPS,
     MATCHES,
     MATCH_BY_ID,
+    R16_MATCHES,
+    R16_MATCH_BY_ID,
+    r16Team,
     DEFAULT_CFG,
     CHAMP_TEAMS,
     CHAMP_DEADLINE,

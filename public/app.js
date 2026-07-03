@@ -146,6 +146,7 @@
         <nav class="tabs">
           ${tabBtn("predict","🎯 پیش‌بینی")}
           ${tabBtn("r16","⚔️ یک‌شانزدهم")}
+          ${tabBtn("r8","🔥 یک‌هشتم")}
           ${tabBtn("champion","🏆 قهرمان")}
           ${tabBtn("board","📊 جدول امتیازات")}
           ${tabBtn("history","🕘 تاریخچهٔ من")}
@@ -163,6 +164,7 @@
     const v = document.getElementById("view");
     if(TAB==="predict") v.innerHTML = viewPredict();
     else if(TAB==="r16") v.innerHTML = viewR16();
+    else if(TAB==="r8") v.innerHTML = viewR8();
     else if(TAB==="champion") v.innerHTML = viewChampion();
     else if(TAB==="board") v.innerHTML = viewBoard();
     else if(TAB==="history") v.innerHTML = viewHistory();
@@ -381,6 +383,32 @@
     return html+`</div>`;
   }
 
+  // ---------- round of 16 (یک‌هشتم) ----------
+  function viewR8(){
+    const list = WC.R8_MATCHES;
+    const days = {};
+    list.forEach(m=>{ const k=dayKey(m.dt); (days[k]=days[k]||[]).push(m); });
+    let html = `<div class="section">
+      <div class="note" style="margin-bottom:0">
+        🔥 مرحلهٔ یک‌هشتم نهایی — پیش‌بینی نتیجه و گلزن‌ها را قبل از سوت شروع هر بازی ثبت کن.
+      </div>`;
+    const keys = Object.keys(days);
+    if(!keys.length) html+=`<div class="empty">بازی‌ای برای نمایش پیدا نشد.</div>`;
+    keys.forEach(d=>{
+      html+=`<div class="daygroup"><div class="dayhdr">📅 ${d}<span class="ln"></span></div>`;
+      days[d].forEach(m=> html+=r16MatchCard(m));
+      html+=`</div>`;
+    });
+    return html+`</div>`;
+  }
+
+  // نشان مرحله برای بازی‌های حذفی
+  function koStageBadge(m){
+    return m.stage==="R8"
+      ? `<span class="gbadge" style="background:linear-gradient(135deg,#6c3483,#8e44ad)">🔥 یک‌هشتم</span>`
+      : `<span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌شانزدهم</span>`;
+  }
+
   function r16MatchCard(m){
     const T = WC.TEAMS;
     const hm = T[m.home] || WC.r16Team(m.home);
@@ -392,7 +420,7 @@
     const bd = (res && res.h!=null) ? WC.scoreOne(pred,res,S.cfg) : null;
     return `<div class="card" data-mid="${m.id}">
       <div class="meta">
-        <span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌شانزدهم</span>
+        ${koStageBadge(m)}
         <span>${fmtDate(m.dt)}</span><span>· ${esc(m.venue)}</span>
         ${lk?`<span class="lockbadge">🔒 قفل شد</span>`:(pred?`<span class="savedbadge">✓ ثبت‌شده</span>`:"")}
       </div>
@@ -505,7 +533,7 @@
   // ---------- history ----------
   function viewHistory(){
     const mp=myPreds();
-    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES);
+    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES).concat(WC.R8_MATCHES);
     const done=allMatches.filter(m=>S.results[m.id]&&S.results[m.id].h!=null&&mp[m.id]);
     const total=done.reduce((s,m)=>s+(WC.scoreOne(mp[m.id],S.results[m.id],S.cfg)?.total||0),0);
     let html=`<div class="section">
@@ -520,12 +548,9 @@
     const T=WC.TEAMS;
     done.forEach(m=>{
       const p=mp[m.id], r=S.results[m.id], d=WC.scoreOne(p,r,S.cfg);
-      const isR16 = m.stage==="R16";
       const hmTeam = T[m.home] || WC.r16Team(m.home);
       const amTeam = T[m.away] || WC.r16Team(m.away);
-      const stageBadge = isR16
-        ? `<span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌شانزدهم</span>`
-        : `<span class="gbadge">گروه ${m.group}</span>`;
+      const stageBadge = m.stage ? koStageBadge(m) : `<span class="gbadge">گروه ${m.group}</span>`;
       html+=`<div class="card">
         <div class="meta">${stageBadge}<span>${fmtDate(m.dt)}</span>
           <span class="ptspill">⭐ ${d.total} امتیاز</span></div>
@@ -585,9 +610,12 @@
         <div class="filters"><button class="fchip ${FILTER.group==="all"?"on":""}" data-fg="all">همه (گروهی)</button>
         ${Object.keys(WC.GROUPS).map(g=>`<button class="fchip ${FILTER.group===g?"on":""}" data-fg="${g}">گروه ${g}</button>`).join("")}
         <button class="fchip ${FILTER.group==="r16"?"on":""}" data-fg="r16">⚔️ یک‌شانزدهم</button>
+        <button class="fchip ${FILTER.group==="r8"?"on":""}" data-fg="r8">🔥 یک‌هشتم</button>
         </div>`;
       if(FILTER.group==="r16"){
         WC.R16_MATCHES.forEach(m=>html+=resultCard(m));
+      } else if(FILTER.group==="r8"){
+        WC.R8_MATCHES.forEach(m=>html+=resultCard(m));
       } else {
         WC.MATCHES.filter(m=>FILTER.group==="all"||m.group===FILTER.group).forEach(m=>html+=resultCard(m));
       }
@@ -631,10 +659,7 @@
     const hm=T[m.home]||WC.r16Team(m.home), am=T[m.away]||WC.r16Team(m.away);
     const res=S.results[m.id];
     const players=[...(hm.p||[]),...(am.p||[])]; ACLISTS[m.id]=players;
-    const isR16=m.stage==="R16";
-    const stageBadge = isR16
-      ? `<span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌شانزدهم</span>`
-      : `<span class="gbadge">گروه ${m.group}</span>`;
+    const stageBadge = m.stage ? koStageBadge(m) : `<span class="gbadge">گروه ${m.group}</span>`;
     return `<div class="card" data-mid="${m.id}">
       <div class="meta">${stageBadge}<span>${fmtDate(m.dt)}</span>
         ${(res&&res.h!=null)?`<span class="savedbadge">✓ ثبت‌شده</span>`:""}</div>
@@ -727,7 +752,7 @@
 
   // به‌روزرسانی خودکار وقتی روی تب پیش‌بینی نیستی (تا تایپِ کاربر قطع نشود)
   setInterval(async()=>{
-    if(document.hidden || !ME || TAB==="predict" || (TAB==="admin")) return;
+    if(document.hidden || !ME || TAB==="predict" || TAB==="r16" || TAB==="r8" || (TAB==="admin")) return;
     try{ await getState(); renderView(); }catch{}
   }, 45000);
 

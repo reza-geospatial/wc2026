@@ -468,6 +468,45 @@
     MATCH_BY_ID[m.id] = m; // به MATCH_BY_ID هم اضافه می‌کنیم تا سرور بتواند نتایج را ثبت کند
   });
 
+  /* ============================================================
+     بازی‌های مرحلهٔ یک‌هشتم نهایی (Round of 16 — ۸ بازی)
+     تاریخ‌ها میلادی و بر اساس UTC — مرورگر به ساعت محلی تبدیل می‌کند
+     در کامنت هر خط، ساعت به وقت برلین (CEST = UTC+2) آمده است
+     ============================================================ */
+  const R8_MATCHES = [
+    // Saturday, July 4 — کانادا / مراکش — 19:00 برلین = 17:00 UTC
+    ["r8m1", "can", "mar", "2026-07-04T17:00:00Z", "استادیوم TBD"],
+    // Saturday, July 4 — پاراگوئه / فرانسه — 23:00 برلین = 21:00 UTC
+    ["r8m2", "par", "fra", "2026-07-04T21:00:00Z", "استادیوم TBD"],
+    // Sunday, July 5 — برزیل / نروژ — 22:00 برلین = 20:00 UTC
+    ["r8m3", "bra", "nor", "2026-07-05T20:00:00Z", "استادیوم TBD"],
+    // Monday, July 6 — مکزیک / انگلیس — 02:00 برلین = 00:00 UTC
+    ["r8m4", "mex", "eng", "2026-07-06T00:00:00Z", "استادیوم TBD"],
+    // Monday, July 6 — اسپانیا / پرتغال — 21:00 برلین = 19:00 UTC
+    ["r8m5", "esp", "por", "2026-07-06T19:00:00Z", "استادیوم TBD"],
+    // Tuesday, July 7 — بلژیک / آمریکا — 02:00 برلین = 00:00 UTC
+    ["r8m6", "bel", "usa", "2026-07-07T00:00:00Z", "استادیوم TBD"],
+    // Tuesday, July 7 — مصر / آرژانتین — 18:00 برلین = 16:00 UTC
+    ["r8m7", "egy", "arg", "2026-07-07T16:00:00Z", "استادیوم TBD"],
+    // Tuesday, July 7 — سوئیس / کلمبیا — 22:00 برلین = 20:00 UTC
+    ["r8m8", "sui", "col", "2026-07-07T20:00:00Z", "استادیوم TBD"],
+  ].map(function (x) {
+    return {
+      id: x[0],
+      stage: "R8",
+      home: x[1],
+      away: x[2],
+      dt: x[3],
+      venue: x[4],
+    };
+  });
+
+  const R8_MATCH_BY_ID = {};
+  R8_MATCHES.forEach(function (m) {
+    R8_MATCH_BY_ID[m.id] = m;
+    MATCH_BY_ID[m.id] = m; // برای ثبت پیش‌بینی و نتیجه در سرور
+  });
+
   const DEFAULT_CFG = {
     pOutcome: 3,
     pOneTeam: 2,
@@ -573,7 +612,7 @@
     cfg = cfg || DEFAULT_CFG;
     champPreds = champPreds || {};
     champion = champion || null;
-    var allMatches = MATCHES.concat(R16_MATCHES);
+    var allMatches = MATCHES.concat(R16_MATCHES).concat(R8_MATCHES);
     var rows = users.map(function (u) {
       var p = preds[u.id] || {};
       var total = 0,
@@ -631,6 +670,8 @@
     MATCH_BY_ID,
     R16_MATCHES,
     R16_MATCH_BY_ID,
+    R8_MATCHES,
+    R8_MATCH_BY_ID,
     r16Team,
     DEFAULT_CFG,
     CHAMP_TEAMS,

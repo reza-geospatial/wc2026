@@ -147,6 +147,7 @@
           ${tabBtn("predict","🎯 پیش‌بینی")}
           ${tabBtn("r16","⚔️ یک‌شانزدهم")}
           ${tabBtn("r8","🔥 یک‌هشتم")}
+          ${tabBtn("r4","🏅 یک‌چهارم")}
           ${tabBtn("champion","🏆 قهرمان")}
           ${tabBtn("board","📊 جدول امتیازات")}
           ${tabBtn("history","🕘 تاریخچهٔ من")}
@@ -165,6 +166,7 @@
     if(TAB==="predict") v.innerHTML = viewPredict();
     else if(TAB==="r16") v.innerHTML = viewR16();
     else if(TAB==="r8") v.innerHTML = viewR8();
+    else if(TAB==="r4") v.innerHTML = viewR4();
     else if(TAB==="champion") v.innerHTML = viewChampion();
     else if(TAB==="board") v.innerHTML = viewBoard();
     else if(TAB==="history") v.innerHTML = viewHistory();
@@ -402,11 +404,32 @@
     return html+`</div>`;
   }
 
+  // ---------- quarter-finals (یک‌چهارم) ----------
+  function viewR4(){
+    const list = WC.R4_MATCHES;
+    const days = {};
+    list.forEach(m=>{ const k=dayKey(m.dt); (days[k]=days[k]||[]).push(m); });
+    let html = `<div class="section">
+      <div class="note" style="margin-bottom:0">
+        🏅 مرحلهٔ یک‌چهارم نهایی — پیش‌بینی نتیجه و گلزن‌ها را قبل از سوت شروع هر بازی ثبت کن.
+      </div>`;
+    const keys = Object.keys(days);
+    if(!keys.length) html+=`<div class="empty">بازی‌ای برای نمایش پیدا نشد.</div>`;
+    keys.forEach(d=>{
+      html+=`<div class="daygroup"><div class="dayhdr">📅 ${d}<span class="ln"></span></div>`;
+      days[d].forEach(m=> html+=r16MatchCard(m));
+      html+=`</div>`;
+    });
+    return html+`</div>`;
+  }
+
   // نشان مرحله برای بازی‌های حذفی
   function koStageBadge(m){
-    return m.stage==="R8"
-      ? `<span class="gbadge" style="background:linear-gradient(135deg,#6c3483,#8e44ad)">🔥 یک‌هشتم</span>`
-      : `<span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌شانزدهم</span>`;
+    if(m.stage==="R4")
+      return `<span class="gbadge" style="background:linear-gradient(135deg,#b7791f,#d4a017)">🏅 یک‌چهارم</span>`;
+    if(m.stage==="R8")
+      return `<span class="gbadge" style="background:linear-gradient(135deg,#6c3483,#8e44ad)">🔥 یک‌هشتم</span>`;
+    return `<span class="gbadge" style="background:linear-gradient(135deg,#c0392b,#e74c3c)">⚔️ یک‌شانزدهم</span>`;
   }
 
   function r16MatchCard(m){
@@ -533,7 +556,7 @@
   // ---------- history ----------
   function viewHistory(){
     const mp=myPreds();
-    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES).concat(WC.R8_MATCHES);
+    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES).concat(WC.R8_MATCHES).concat(WC.R4_MATCHES);
     const done=allMatches.filter(m=>S.results[m.id]&&S.results[m.id].h!=null&&mp[m.id]);
     const total=done.reduce((s,m)=>s+(WC.scoreOne(mp[m.id],S.results[m.id],S.cfg)?.total||0),0);
     let html=`<div class="section">
@@ -611,11 +634,14 @@
         ${Object.keys(WC.GROUPS).map(g=>`<button class="fchip ${FILTER.group===g?"on":""}" data-fg="${g}">گروه ${g}</button>`).join("")}
         <button class="fchip ${FILTER.group==="r16"?"on":""}" data-fg="r16">⚔️ یک‌شانزدهم</button>
         <button class="fchip ${FILTER.group==="r8"?"on":""}" data-fg="r8">🔥 یک‌هشتم</button>
+        <button class="fchip ${FILTER.group==="r4"?"on":""}" data-fg="r4">🏅 یک‌چهارم</button>
         </div>`;
       if(FILTER.group==="r16"){
         WC.R16_MATCHES.forEach(m=>html+=resultCard(m));
       } else if(FILTER.group==="r8"){
         WC.R8_MATCHES.forEach(m=>html+=resultCard(m));
+      } else if(FILTER.group==="r4"){
+        WC.R4_MATCHES.forEach(m=>html+=resultCard(m));
       } else {
         WC.MATCHES.filter(m=>FILTER.group==="all"||m.group===FILTER.group).forEach(m=>html+=resultCard(m));
       }
@@ -752,7 +778,7 @@
 
   // به‌روزرسانی خودکار وقتی روی تب پیش‌بینی نیستی (تا تایپِ کاربر قطع نشود)
   setInterval(async()=>{
-    if(document.hidden || !ME || TAB==="predict" || TAB==="r16" || TAB==="r8" || (TAB==="admin")) return;
+    if(document.hidden || !ME || TAB==="predict" || TAB==="r16" || TAB==="r8" || TAB==="r4" || (TAB==="admin")) return;
     try{ await getState(); renderView(); }catch{}
   }, 45000);
 

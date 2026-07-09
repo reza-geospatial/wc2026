@@ -507,6 +507,37 @@
     MATCH_BY_ID[m.id] = m; // برای ثبت پیش‌بینی و نتیجه در سرور
   });
 
+  /* ============================================================
+     بازی‌های مرحلهٔ یک‌چهارم نهایی (Quarter-finals — ۴ بازی)
+     تاریخ‌ها میلادی و بر اساس UTC — مرورگر به ساعت محلی تبدیل می‌کند
+     در کامنت هر خط ساعت به وقت ایران (UTC+3:30) و برلین (CEST = UTC+2) آمده است
+     ============================================================ */
+  const R4_MATCHES = [
+    // Thursday, July 9 — فرانسه / مراکش — 23:30 ایران = 22:00 برلین = 20:00 UTC
+    ["r4m1", "fra", "mar", "2026-07-09T20:00:00Z", "استادیوم TBD"],
+    // Friday, July 10 — اسپانیا / بلژیک — 22:30 ایران = 21:00 برلین = 19:00 UTC
+    ["r4m2", "esp", "bel", "2026-07-10T19:00:00Z", "استادیوم TBD"],
+    // Sunday, July 12 — نروژ / انگلیس — 00:30 ایران = 23:00 برلین (شنبه) = 21:00 UTC (شنبه ۱۱ ژوئیه)
+    ["r4m3", "nor", "eng", "2026-07-11T21:00:00Z", "استادیوم TBD"],
+    // Sunday, July 12 — آرژانتین / سوئیس — 04:30 ایران = 03:00 برلین = 01:00 UTC
+    ["r4m4", "arg", "sui", "2026-07-12T01:00:00Z", "استادیوم TBD"],
+  ].map(function (x) {
+    return {
+      id: x[0],
+      stage: "R4",
+      home: x[1],
+      away: x[2],
+      dt: x[3],
+      venue: x[4],
+    };
+  });
+
+  const R4_MATCH_BY_ID = {};
+  R4_MATCHES.forEach(function (m) {
+    R4_MATCH_BY_ID[m.id] = m;
+    MATCH_BY_ID[m.id] = m; // برای ثبت پیش‌بینی و نتیجه در سرور
+  });
+
   const DEFAULT_CFG = {
     pOutcome: 3,
     pOneTeam: 2,
@@ -612,7 +643,7 @@
     cfg = cfg || DEFAULT_CFG;
     champPreds = champPreds || {};
     champion = champion || null;
-    var allMatches = MATCHES.concat(R16_MATCHES).concat(R8_MATCHES);
+    var allMatches = MATCHES.concat(R16_MATCHES).concat(R8_MATCHES).concat(R4_MATCHES);
     var rows = users.map(function (u) {
       var p = preds[u.id] || {};
       var total = 0,
@@ -672,6 +703,8 @@
     R16_MATCH_BY_ID,
     R8_MATCHES,
     R8_MATCH_BY_ID,
+    R4_MATCHES,
+    R4_MATCH_BY_ID,
     r16Team,
     DEFAULT_CFG,
     CHAMP_TEAMS,

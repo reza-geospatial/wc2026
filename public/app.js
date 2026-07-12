@@ -148,6 +148,7 @@
           ${tabBtn("r16","⚔️ یک‌شانزدهم")}
           ${tabBtn("r8","🔥 یک‌هشتم")}
           ${tabBtn("r4","🏅 یک‌چهارم")}
+          ${tabBtn("sf","🥇 نیمه‌نهایی")}
           ${tabBtn("champion","🏆 قهرمان")}
           ${tabBtn("board","📊 جدول امتیازات")}
           ${tabBtn("history","🕘 تاریخچهٔ من")}
@@ -167,6 +168,7 @@
     else if(TAB==="r16") v.innerHTML = viewR16();
     else if(TAB==="r8") v.innerHTML = viewR8();
     else if(TAB==="r4") v.innerHTML = viewR4();
+    else if(TAB==="sf") v.innerHTML = viewSF();
     else if(TAB==="champion") v.innerHTML = viewChampion();
     else if(TAB==="board") v.innerHTML = viewBoard();
     else if(TAB==="history") v.innerHTML = viewHistory();
@@ -423,8 +425,29 @@
     return html+`</div>`;
   }
 
+  // ---------- semi-finals (نیمه‌نهایی) ----------
+  function viewSF(){
+    const list = WC.SF_MATCHES;
+    const days = {};
+    list.forEach(m=>{ const k=dayKey(m.dt); (days[k]=days[k]||[]).push(m); });
+    let html = `<div class="section">
+      <div class="note" style="margin-bottom:0">
+        🥇 مرحلهٔ نیمه‌نهایی — پیش‌بینی نتیجه و گلزن‌ها را قبل از سوت شروع هر بازی ثبت کن.
+      </div>`;
+    const keys = Object.keys(days);
+    if(!keys.length) html+=`<div class="empty">بازی‌ای برای نمایش پیدا نشد.</div>`;
+    keys.forEach(d=>{
+      html+=`<div class="daygroup"><div class="dayhdr">📅 ${d}<span class="ln"></span></div>`;
+      days[d].forEach(m=> html+=r16MatchCard(m));
+      html+=`</div>`;
+    });
+    return html+`</div>`;
+  }
+
   // نشان مرحله برای بازی‌های حذفی
   function koStageBadge(m){
+    if(m.stage==="SF")
+      return `<span class="gbadge" style="background:linear-gradient(135deg,#1e8449,#27ae60)">🥇 نیمه‌نهایی</span>`;
     if(m.stage==="R4")
       return `<span class="gbadge" style="background:linear-gradient(135deg,#b7791f,#d4a017)">🏅 یک‌چهارم</span>`;
     if(m.stage==="R8")
@@ -556,7 +579,7 @@
   // ---------- history ----------
   function viewHistory(){
     const mp=myPreds();
-    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES).concat(WC.R8_MATCHES).concat(WC.R4_MATCHES);
+    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES).concat(WC.R8_MATCHES).concat(WC.R4_MATCHES).concat(WC.SF_MATCHES);
     const done=allMatches.filter(m=>S.results[m.id]&&S.results[m.id].h!=null&&mp[m.id]);
     const total=done.reduce((s,m)=>s+(WC.scoreOne(mp[m.id],S.results[m.id],S.cfg)?.total||0),0);
     let html=`<div class="section">
@@ -635,6 +658,7 @@
         <button class="fchip ${FILTER.group==="r16"?"on":""}" data-fg="r16">⚔️ یک‌شانزدهم</button>
         <button class="fchip ${FILTER.group==="r8"?"on":""}" data-fg="r8">🔥 یک‌هشتم</button>
         <button class="fchip ${FILTER.group==="r4"?"on":""}" data-fg="r4">🏅 یک‌چهارم</button>
+        <button class="fchip ${FILTER.group==="sf"?"on":""}" data-fg="sf">🥇 نیمه‌نهایی</button>
         </div>`;
       if(FILTER.group==="r16"){
         WC.R16_MATCHES.forEach(m=>html+=resultCard(m));
@@ -642,6 +666,8 @@
         WC.R8_MATCHES.forEach(m=>html+=resultCard(m));
       } else if(FILTER.group==="r4"){
         WC.R4_MATCHES.forEach(m=>html+=resultCard(m));
+      } else if(FILTER.group==="sf"){
+        WC.SF_MATCHES.forEach(m=>html+=resultCard(m));
       } else {
         WC.MATCHES.filter(m=>FILTER.group==="all"||m.group===FILTER.group).forEach(m=>html+=resultCard(m));
       }

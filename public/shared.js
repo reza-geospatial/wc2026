@@ -538,6 +538,33 @@
     MATCH_BY_ID[m.id] = m; // برای ثبت پیش‌بینی و نتیجه در سرور
   });
 
+  /* ============================================================
+     بازی‌های مرحلهٔ نیمه‌نهایی (Semi-finals — ۲ بازی)
+     تاریخ‌ها میلادی و بر اساس UTC — مرورگر به ساعت محلی تبدیل می‌کند
+     در کامنت هر خط ساعت به وقت ایران (UTC+3:30) آمده است
+     ============================================================ */
+  const SF_MATCHES = [
+    // سه‌شنبه ۲۳ تیر = Tuesday, July 14 — فرانسه / اسپانیا — 22:30 ایران = 19:00 UTC
+    ["sfm1", "fra", "esp", "2026-07-14T19:00:00Z", "استادیوم TBD"],
+    // چهارشنبه ۲۴ تیر = Wednesday, July 15 — انگلیس / آرژانتین — 22:30 ایران = 19:00 UTC
+    ["sfm2", "eng", "arg", "2026-07-15T19:00:00Z", "استادیوم TBD"],
+  ].map(function (x) {
+    return {
+      id: x[0],
+      stage: "SF",
+      home: x[1],
+      away: x[2],
+      dt: x[3],
+      venue: x[4],
+    };
+  });
+
+  const SF_MATCH_BY_ID = {};
+  SF_MATCHES.forEach(function (m) {
+    SF_MATCH_BY_ID[m.id] = m;
+    MATCH_BY_ID[m.id] = m; // برای ثبت پیش‌بینی و نتیجه در سرور
+  });
+
   const DEFAULT_CFG = {
     pOutcome: 3,
     pOneTeam: 2,
@@ -643,7 +670,7 @@
     cfg = cfg || DEFAULT_CFG;
     champPreds = champPreds || {};
     champion = champion || null;
-    var allMatches = MATCHES.concat(R16_MATCHES).concat(R8_MATCHES).concat(R4_MATCHES);
+    var allMatches = MATCHES.concat(R16_MATCHES).concat(R8_MATCHES).concat(R4_MATCHES).concat(SF_MATCHES);
     var rows = users.map(function (u) {
       var p = preds[u.id] || {};
       var total = 0,
@@ -705,6 +732,8 @@
     R8_MATCH_BY_ID,
     R4_MATCHES,
     R4_MATCH_BY_ID,
+    SF_MATCHES,
+    SF_MATCH_BY_ID,
     r16Team,
     DEFAULT_CFG,
     CHAMP_TEAMS,

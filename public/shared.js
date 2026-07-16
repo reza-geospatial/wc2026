@@ -565,6 +565,56 @@
     MATCH_BY_ID[m.id] = m; // برای ثبت پیش‌بینی و نتیجه در سرور
   });
 
+  /* ============================================================
+     بازی رده‌بندی (Third-place play-off — ۱ بازی)
+     تاریخ میلادی و بر اساس UTC — مرورگر به ساعت محلی تبدیل می‌کند
+     در کامنت ساعت به وقت ایران (UTC+3:30) آمده است
+     ============================================================ */
+  const F3_MATCHES = [
+    // یکشنبه ۲۸ تیر = Sunday, July 19 — فرانسه / انگلیس — 00:30 ایران = 21:00 UTC (شنبه ۱۸ ژوئیه)
+    ["f3m1", "fra", "eng", "2026-07-18T21:00:00Z", "استادیوم TBD"],
+  ].map(function (x) {
+    return {
+      id: x[0],
+      stage: "F3",
+      home: x[1],
+      away: x[2],
+      dt: x[3],
+      venue: x[4],
+    };
+  });
+
+  const F3_MATCH_BY_ID = {};
+  F3_MATCHES.forEach(function (m) {
+    F3_MATCH_BY_ID[m.id] = m;
+    MATCH_BY_ID[m.id] = m; // برای ثبت پیش‌بینی و نتیجه در سرور
+  });
+
+  /* ============================================================
+     بازی فینال (Final — ۱ بازی)
+     تاریخ میلادی و بر اساس UTC — مرورگر به ساعت محلی تبدیل می‌کند
+     در کامنت ساعت به وقت ایران (UTC+3:30) آمده است
+     ============================================================ */
+  const FINAL_MATCHES = [
+    // یکشنبه ۲۸ تیر = Sunday, July 19 — اسپانیا / آرژانتین — 22:30 ایران = 19:00 UTC
+    ["finm1", "esp", "arg", "2026-07-19T19:00:00Z", "استادیوم TBD"],
+  ].map(function (x) {
+    return {
+      id: x[0],
+      stage: "FINAL",
+      home: x[1],
+      away: x[2],
+      dt: x[3],
+      venue: x[4],
+    };
+  });
+
+  const FINAL_MATCH_BY_ID = {};
+  FINAL_MATCHES.forEach(function (m) {
+    FINAL_MATCH_BY_ID[m.id] = m;
+    MATCH_BY_ID[m.id] = m; // برای ثبت پیش‌بینی و نتیجه در سرور
+  });
+
   const DEFAULT_CFG = {
     pOutcome: 3,
     pOneTeam: 2,
@@ -670,7 +720,7 @@
     cfg = cfg || DEFAULT_CFG;
     champPreds = champPreds || {};
     champion = champion || null;
-    var allMatches = MATCHES.concat(R16_MATCHES).concat(R8_MATCHES).concat(R4_MATCHES).concat(SF_MATCHES);
+    var allMatches = MATCHES.concat(R16_MATCHES).concat(R8_MATCHES).concat(R4_MATCHES).concat(SF_MATCHES).concat(F3_MATCHES).concat(FINAL_MATCHES);
     var rows = users.map(function (u) {
       var p = preds[u.id] || {};
       var total = 0,
@@ -734,6 +784,10 @@
     R4_MATCH_BY_ID,
     SF_MATCHES,
     SF_MATCH_BY_ID,
+    F3_MATCHES,
+    F3_MATCH_BY_ID,
+    FINAL_MATCHES,
+    FINAL_MATCH_BY_ID,
     r16Team,
     DEFAULT_CFG,
     CHAMP_TEAMS,

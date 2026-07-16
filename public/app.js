@@ -149,6 +149,8 @@
           ${tabBtn("r8","🔥 یک‌هشتم")}
           ${tabBtn("r4","🏅 یک‌چهارم")}
           ${tabBtn("sf","🥇 نیمه‌نهایی")}
+          ${tabBtn("f3","🥉 رده‌بندی")}
+          ${tabBtn("final","🏆 فینال")}
           ${tabBtn("champion","🏆 قهرمان")}
           ${tabBtn("board","📊 جدول امتیازات")}
           ${tabBtn("history","🕘 تاریخچهٔ من")}
@@ -169,6 +171,8 @@
     else if(TAB==="r8") v.innerHTML = viewR8();
     else if(TAB==="r4") v.innerHTML = viewR4();
     else if(TAB==="sf") v.innerHTML = viewSF();
+    else if(TAB==="f3") v.innerHTML = viewF3();
+    else if(TAB==="final") v.innerHTML = viewFinal();
     else if(TAB==="champion") v.innerHTML = viewChampion();
     else if(TAB==="board") v.innerHTML = viewBoard();
     else if(TAB==="history") v.innerHTML = viewHistory();
@@ -444,8 +448,50 @@
     return html+`</div>`;
   }
 
+  // ---------- third-place play-off (رده‌بندی) ----------
+  function viewF3(){
+    const list = WC.F3_MATCHES;
+    const days = {};
+    list.forEach(m=>{ const k=dayKey(m.dt); (days[k]=days[k]||[]).push(m); });
+    let html = `<div class="section">
+      <div class="note" style="margin-bottom:0">
+        🥉 بازی رده‌بندی — پیش‌بینی نتیجه و گلزن‌ها را قبل از سوت شروع بازی ثبت کن.
+      </div>`;
+    const keys = Object.keys(days);
+    if(!keys.length) html+=`<div class="empty">بازی‌ای برای نمایش پیدا نشد.</div>`;
+    keys.forEach(d=>{
+      html+=`<div class="daygroup"><div class="dayhdr">📅 ${d}<span class="ln"></span></div>`;
+      days[d].forEach(m=> html+=r16MatchCard(m));
+      html+=`</div>`;
+    });
+    return html+`</div>`;
+  }
+
+  // ---------- final (فینال) ----------
+  function viewFinal(){
+    const list = WC.FINAL_MATCHES;
+    const days = {};
+    list.forEach(m=>{ const k=dayKey(m.dt); (days[k]=days[k]||[]).push(m); });
+    let html = `<div class="section">
+      <div class="note" style="margin-bottom:0">
+        🏆 فینال جام جهانی — پیش‌بینی نتیجه و گلزن‌ها را قبل از سوت شروع بازی ثبت کن.
+      </div>`;
+    const keys = Object.keys(days);
+    if(!keys.length) html+=`<div class="empty">بازی‌ای برای نمایش پیدا نشد.</div>`;
+    keys.forEach(d=>{
+      html+=`<div class="daygroup"><div class="dayhdr">📅 ${d}<span class="ln"></span></div>`;
+      days[d].forEach(m=> html+=r16MatchCard(m));
+      html+=`</div>`;
+    });
+    return html+`</div>`;
+  }
+
   // نشان مرحله برای بازی‌های حذفی
   function koStageBadge(m){
+    if(m.stage==="FINAL")
+      return `<span class="gbadge" style="background:linear-gradient(135deg,#b8860b,#f1c40f)">🏆 فینال</span>`;
+    if(m.stage==="F3")
+      return `<span class="gbadge" style="background:linear-gradient(135deg,#7f8c8d,#95a5a6)">🥉 رده‌بندی</span>`;
     if(m.stage==="SF")
       return `<span class="gbadge" style="background:linear-gradient(135deg,#1e8449,#27ae60)">🥇 نیمه‌نهایی</span>`;
     if(m.stage==="R4")
@@ -579,7 +625,7 @@
   // ---------- history ----------
   function viewHistory(){
     const mp=myPreds();
-    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES).concat(WC.R8_MATCHES).concat(WC.R4_MATCHES).concat(WC.SF_MATCHES);
+    const allMatches = WC.MATCHES.concat(WC.R16_MATCHES).concat(WC.R8_MATCHES).concat(WC.R4_MATCHES).concat(WC.SF_MATCHES).concat(WC.F3_MATCHES).concat(WC.FINAL_MATCHES);
     const done=allMatches.filter(m=>S.results[m.id]&&S.results[m.id].h!=null&&mp[m.id]);
     const total=done.reduce((s,m)=>s+(WC.scoreOne(mp[m.id],S.results[m.id],S.cfg)?.total||0),0);
     let html=`<div class="section">
@@ -659,6 +705,8 @@
         <button class="fchip ${FILTER.group==="r8"?"on":""}" data-fg="r8">🔥 یک‌هشتم</button>
         <button class="fchip ${FILTER.group==="r4"?"on":""}" data-fg="r4">🏅 یک‌چهارم</button>
         <button class="fchip ${FILTER.group==="sf"?"on":""}" data-fg="sf">🥇 نیمه‌نهایی</button>
+        <button class="fchip ${FILTER.group==="f3"?"on":""}" data-fg="f3">🥉 رده‌بندی</button>
+        <button class="fchip ${FILTER.group==="final"?"on":""}" data-fg="final">🏆 فینال</button>
         </div>`;
       if(FILTER.group==="r16"){
         WC.R16_MATCHES.forEach(m=>html+=resultCard(m));
@@ -668,6 +716,10 @@
         WC.R4_MATCHES.forEach(m=>html+=resultCard(m));
       } else if(FILTER.group==="sf"){
         WC.SF_MATCHES.forEach(m=>html+=resultCard(m));
+      } else if(FILTER.group==="f3"){
+        WC.F3_MATCHES.forEach(m=>html+=resultCard(m));
+      } else if(FILTER.group==="final"){
+        WC.FINAL_MATCHES.forEach(m=>html+=resultCard(m));
       } else {
         WC.MATCHES.filter(m=>FILTER.group==="all"||m.group===FILTER.group).forEach(m=>html+=resultCard(m));
       }
